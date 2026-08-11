@@ -147,7 +147,9 @@ impl UdfEntry<'_> {
 
     /// Return the POSIX file mode.
     pub fn mode(&self) -> Mode {
-        let mode = unsafe { libcdio_sys::udf_get_posix_filemode(self.entry.as_ptr()) };
+        // `mode_t` is non-portable (16 or 32 bit)
+        #[allow(clippy::useless_conversion)]
+        let mode = u32::from(unsafe { libcdio_sys::udf_get_posix_filemode(self.entry.as_ptr()) });
         Mode::new(mode, u32::MAX)
     }
 
@@ -193,7 +195,9 @@ impl UdfEntryReader<'_> {
         let _ = unsafe {
             libcdio_sys::udf_setpos(
                 self.entry.entry.as_ptr(),
-                block_num as i64 * Udf::BLOCK_SIZE as i64,
+                (block_num * Udf::BLOCK_SIZE)
+                    .try_into()
+                    .expect("block's byte offset should fit an `off_t`"),
             )
         };
     }
@@ -219,7 +223,8 @@ impl io::Read for UdfEntryReader<'_> {
             let ret = unsafe {
                 libcdio_sys::udf_read_block(self.entry.entry.as_ptr(), block.as_mut_ptr().cast(), 1)
             };
-            if ret != block.len().cast_signed() {
+            // cast is safe as Udf::BLOCK_SIZE < i16::MAX
+            if ret != block.len() as _ {
                 return Err(io::Error::other(format!(
                     "error reading udf block number: {block_num}",
                 )));
