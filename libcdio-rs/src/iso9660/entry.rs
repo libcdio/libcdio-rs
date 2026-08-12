@@ -217,6 +217,8 @@ impl io::Seek for Iso9660EntryReader<'_> {
 mod tests {
     use std::{io::Read, path::Path};
 
+    use time::macros::datetime;
+
     use crate::iso9660::{
         Iso9660,
         tests::{test_joliet_file, test_rockridge_file},
@@ -280,6 +282,16 @@ mod tests {
 
         let dir = iso.entry(Path::new("/copy")).unwrap();
         assert!(dir.is_dir());
+    }
+
+    #[test]
+    fn timestamp() {
+        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry(Path::new("/COPYING")).unwrap();
+        assert_eq!(
+            entry.timestamp().unwrap(),
+            datetime!(2005-03-05 20:55:51.0 +05:30:00),
+        );
     }
 
     #[test]
