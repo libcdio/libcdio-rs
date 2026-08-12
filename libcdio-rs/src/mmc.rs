@@ -88,7 +88,7 @@ impl Mmc {
     pub fn new() -> Result<Mmc, MmcNotFoundError> {
         Cdio::with_device(None)
             .map(|cdio| Self { cdio })
-            .filter(|mmc| mmc.level().is_ok())
+            .filter(|mmc| mmc.is_mmc_device().is_ok_and(|is_mmc| is_mmc))
             .ok_or(MmcNotFoundError)
     }
 
@@ -110,11 +110,15 @@ impl Mmc {
                 source: WithDeviceErrorKind::CouldNotOpenDevice,
             });
         };
-        let mmc = Self { cdio };
-        return mmc.level().map(|_| mmc).map_err(|_| WithDeviceError {
-            device: os_string_from_bytes_safe(device.into_bytes()).into(),
-            source: WithDeviceErrorKind::MmcNotSupported,
-        });
+        let maybe_mmc = Self { cdio };
+        if maybe_mmc.is_mmc_device().is_ok_and(|is_mmc| is_mmc) {
+            return Ok(maybe_mmc);
+        } else {
+            return Err(WithDeviceError {
+                device: os_string_from_bytes_safe(device.into_bytes()).into(),
+                source: WithDeviceErrorKind::MmcNotSupported,
+            });
+        }
 
         fn os_string_from_bytes_safe(bytes: Vec<u8>) -> OsString {
             // SAFETY: the bytes originate from an OsString

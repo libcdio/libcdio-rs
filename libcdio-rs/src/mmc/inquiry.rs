@@ -84,6 +84,20 @@ impl Mmc {
         const ALLOC_LEN: usize = 255;
         const EVPD_SET: u8 = 1;
     }
+
+    /// Does the device support MMC.
+    ///
+    /// Per SCSI, a device that responds to an SPC `INQUIRY` with a
+    /// `Peripheral device type` of `CD/DVD device` is expected
+    /// to implement MMC.
+    pub(crate) fn is_mmc_device(&self) -> Result<bool, MmcInquiryError> {
+        let response = self.inquiry(InquiryKind::Standard)?;
+        let peripheral_device_type = response[0] & PERIPHERAL_DEVICE_TYPE_BITMASK;
+        return Ok(peripheral_device_type == PERIPHERAL_DEVICE_TYPE_CD_DVD);
+
+        const PERIPHERAL_DEVICE_TYPE_BITMASK: u8 = 0b11111;
+        const PERIPHERAL_DEVICE_TYPE_CD_DVD: u8 = 0x05;
+    }
 }
 
 /// could not get hardware identifiers
