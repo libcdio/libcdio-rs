@@ -140,7 +140,7 @@ impl Iso9660Entry<'_> {
     /// `None` if the timestamp is invalid.
     pub fn timestamp(&self) -> Option<OffsetDateTime> {
         let tm = unsafe { (*self.stat.as_ptr()).tm };
-        util::convert_tm(tm).ok()
+        util::convert_tm_local(tm).ok()
     }
 
     /// A type that implements [`io::Read`], for reading an ISO9660 entry.

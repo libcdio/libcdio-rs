@@ -22,7 +22,7 @@ file-mode = { version = "0.1.2", optional = true }
 libcdio-sys.workspace = true
 num_enum = { version = "0.7.6", features = ["complex-expressions"] }
 thiserror = "2.0.18"
-time = { optional = true, workspace = true }
+time = { workspace = true, features = ["local-offset"], optional = true }
 tracing.workspace = true
 winnow = { version = "1.0.3", features = ["binary", "parser", "std"], default-features = false }
 
