@@ -47,12 +47,7 @@ mod start_stop_unit;
 mod test_unit_ready;
 
 use docsplay::Display;
-use libcdio_sys::{
-    cdio_mmc_level_t_CDIO_MMC_LEVEL_1, cdio_mmc_level_t_CDIO_MMC_LEVEL_2,
-    cdio_mmc_level_t_CDIO_MMC_LEVEL_3, cdio_mmc_level_t_CDIO_MMC_LEVEL_NONE,
-    cdio_mmc_level_t_CDIO_MMC_LEVEL_WEIRD,
-};
-use num_enum::{FromPrimitive, TryFromPrimitive};
+use num_enum::FromPrimitive;
 use thiserror::Error;
 
 use crate::cdio::Cdio;
@@ -60,24 +55,6 @@ use crate::cdio::Cdio;
 /// An interface for SCSI MMC commands.
 pub struct Mmc {
     cdio: Cdio,
-}
-
-/// Represents the MMC Level.
-#[non_exhaustive]
-#[repr(u32)]
-#[derive(
-    Clone, Debug, Default, Display, Eq, Hash, Ord, PartialEq, PartialOrd, TryFromPrimitive,
-)]
-pub enum MmcLevel {
-    #[default]
-    /// Unknown
-    Unknown = cdio_mmc_level_t_CDIO_MMC_LEVEL_WEIRD,
-    /// MMC-1
-    Mmc1 = cdio_mmc_level_t_CDIO_MMC_LEVEL_1,
-    /// MMC-2
-    Mmc2 = cdio_mmc_level_t_CDIO_MMC_LEVEL_2,
-    /// MMC-3
-    Mmc3 = cdio_mmc_level_t_CDIO_MMC_LEVEL_3,
 }
 
 impl Mmc {
@@ -88,7 +65,7 @@ impl Mmc {
     pub fn new() -> Result<Mmc, MmcNotFoundError> {
         Cdio::with_device(None)
             .map(|cdio| Self { cdio })
-            .filter(|mmc| mmc.level().is_ok())
+            .filter(|mmc| mmc.is_mmc_device().is_ok_and(|is_mmc| is_mmc))
             .ok_or(MmcNotFoundError)
     }
 
@@ -110,30 +87,20 @@ impl Mmc {
                 source: WithDeviceErrorKind::CouldNotOpenDevice,
             });
         };
-        let mmc = Self { cdio };
-        return mmc.level().map(|_| mmc).map_err(|_| WithDeviceError {
-            device: os_string_from_bytes_safe(device.into_bytes()).into(),
-            source: WithDeviceErrorKind::MmcNotSupported,
-        });
+        let maybe_mmc = Self { cdio };
+        if maybe_mmc.is_mmc_device().is_ok_and(|is_mmc| is_mmc) {
+            return Ok(maybe_mmc);
+        } else {
+            return Err(WithDeviceError {
+                device: os_string_from_bytes_safe(device.into_bytes()).into(),
+                source: WithDeviceErrorKind::MmcNotSupported,
+            });
+        }
 
         fn os_string_from_bytes_safe(bytes: Vec<u8>) -> OsString {
             // SAFETY: the bytes originate from an OsString
             unsafe { OsString::from_encoded_bytes_unchecked(bytes) }
         }
-    }
-
-    /// Get the MMC level supported by the drive.
-    ///
-    /// # Errors
-    /// If an underlying operation failed, or if the device is unavailable.
-    pub fn level(&self) -> Result<MmcLevel, MmcOperationError> {
-        let mmc_level = unsafe { libcdio_sys::mmc_get_drive_mmc_cap(self.cdio.as_ptr()) };
-        if mmc_level == cdio_mmc_level_t_CDIO_MMC_LEVEL_NONE {
-            return Err(MmcOperationError);
-        }
-
-        Ok(MmcLevel::try_from(mmc_level)
-            .expect("mmc_get_drive_mmc_cap should return a valid mmc_level_t"))
     }
 
     /// Returns the current sense data from the device.
@@ -403,11 +370,6 @@ mod tests {
     #[ignore = "requires a disc drive with mmc"]
     fn with_device() {
         Mmc::with_device(PathBuf::from("/dev/cdrom")).unwrap();
-    }
-    #[test]
-    #[ignore = "requires a disc drive with mmc"]
-    fn level() {
-        Mmc::new().unwrap().level().unwrap();
     }
 
     #[test_log::test(test)]

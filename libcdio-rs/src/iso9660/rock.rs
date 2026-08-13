@@ -111,7 +111,7 @@ fn convert_rock_timefield(field: iso_rock_time_s) -> Option<OffsetDateTime> {
     // SAFETY: The above ffi calls are infallible, thus tm should be initialized.
     let tm = unsafe { tm.assume_init() };
 
-    util::convert_tm(tm).ok()
+    util::convert_tm_local(tm).ok()
 }
 
 #[cfg(test)]
