@@ -175,8 +175,9 @@ impl io::Read for Iso9660EntryReader<'_> {
                 )
             };
             // the returned value is either BLOCK_SIZE or zero on error, thus
-            // excess bytes past the last read must be handled
-            if ret != block.len() as i64 {
+            // excess bytes past the last read must be handled.
+            // cast is safe as Iso9660::BLOCK_SIZE < i16::MAX
+            if ret != block.len() as _ {
                 return Err(io::Error::other(format!(
                     "error reading block at lsn: {lsn}",
                 )));

@@ -48,11 +48,11 @@ mod test_unit_ready;
 
 use docsplay::Display;
 use libcdio_sys::{
-    cdio_mmc_direction_t, cdio_mmc_level_t_CDIO_MMC_LEVEL_1, cdio_mmc_level_t_CDIO_MMC_LEVEL_2,
+    cdio_mmc_level_t_CDIO_MMC_LEVEL_1, cdio_mmc_level_t_CDIO_MMC_LEVEL_2,
     cdio_mmc_level_t_CDIO_MMC_LEVEL_3, cdio_mmc_level_t_CDIO_MMC_LEVEL_NONE,
     cdio_mmc_level_t_CDIO_MMC_LEVEL_WEIRD,
 };
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use num_enum::{FromPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
 use crate::cdio::Cdio;
@@ -167,8 +167,10 @@ impl Mmc {
         buf: &mut [u8],
         cdb: Cdb,
     ) -> Result<(), MmcError> {
+        // the cast is safe as MmcDirection's discriminants are
+        // small (< i8::MAX) and non-negative
         let direction = direction
-            .map(cdio_mmc_direction_t::from)
+            .map(|d| d as _)
             .unwrap_or(libcdio_sys::mmc_direction_s_SCSI_MMC_DATA_NONE);
         let cdb = libcdio_sys::mmc_cdb_s { field: cdb };
         let ret = unsafe {
@@ -177,7 +179,9 @@ impl Mmc {
                 DEFAULT_TIMEOUT_MS,
                 &cdb,
                 direction,
-                buf.len() as u32,
+                buf.len()
+                    .try_into()
+                    .expect("failed to cast length of buf passed to Mmc::run_command()"),
                 buf.as_mut_ptr().cast(),
             )
         };
@@ -335,13 +339,14 @@ impl Default for SenseKey {
 }
 
 /// Direction of MMC data transfer
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, IntoPrimitive)]
+// The casts are safe since the C enums have implicit discriminants,
+// which should be small and non-negative.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum MmcDirection {
     #[default]
-    Read = libcdio_sys::mmc_direction_s_SCSI_MMC_DATA_READ,
+    Read = libcdio_sys::mmc_direction_s_SCSI_MMC_DATA_READ as _,
     #[allow(unused)]
-    Write = libcdio_sys::mmc_direction_s_SCSI_MMC_DATA_WRITE,
+    Write = libcdio_sys::mmc_direction_s_SCSI_MMC_DATA_WRITE as _,
 }
 
 /// error performing MMC command

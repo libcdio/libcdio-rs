@@ -196,87 +196,90 @@ pub struct DriveCapabilities {
     pub write: WriteCapabilities,
     pub misc: MiscCapabilities,
 }
+// the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct MiscCapabilities: u32 {
         /// Can close tray
-        const CloseTray = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_CLOSE_TRAY;
+        const CloseTray = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_CLOSE_TRAY as _;
         /// Can eject
-        const Eject = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_EJECT;
+        const Eject = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_EJECT as _;
         /// Can disable manual eject
-        const Lock = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_LOCK;
+        const Lock = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_LOCK as _;
         /// Can set drive speed
-        const SelectSpeed = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_SELECT_SPEED;
+        const SelectSpeed = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_SELECT_SPEED as _;
         /// Can select juke-box disc
-        const SelectDisc = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_SELECT_DISC;
+        const SelectDisc = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_SELECT_DISC as _;
         /// Can read multiple sessions
-        const MultiSession = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_MULTI_SESSION;
+        const MultiSession = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_MULTI_SESSION as _;
         /// Can detect if media changed
-        const MediaChanged = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_MEDIA_CHANGED;
+        const MediaChanged = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_MEDIA_CHANGED as _;
         /// Can hard reset device
-        const Reset = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_RESET;
+        const Reset = libcdio_sys::cdio_drive_cap_misc_t_CDIO_DRIVE_CAP_MISC_RESET as _;
     }
 }
+// the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
     /// Read capabilities of the drive
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ReadCapabilities: u32 {
         /// Can play audio
-        const Audio = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_AUDIO;
+        const Audio = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_AUDIO as _;
         /// Can read CD-DA
-        const CdDa = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_DA;
+        const CdDa = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_DA as _;
         /// Can read CD+G
-        const CdPlusG = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_G;
+        const CdPlusG = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_G as _;
         /// Can read CD-R
-        const CdR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_R;
+        const CdR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_R as _;
         /// Can read CD-RW
-        const CdRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_RW;
+        const CdRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_CD_RW as _;
         /// Can read DVD-R
-        const DvdR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_R;
+        const DvdR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_R as _;
         /// Can read DVD+R
-        const DvdPlusR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_PR;
+        const DvdPlusR = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_PR as _;
         /// Can read DVD-RAM
-        const DvdRam = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RAM;
+        const DvdRam = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RAM as _;
         /// Can read DVD-ROM
-        const DvdRom = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_ROM;
+        const DvdRom = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_ROM as _;
         /// Can read DVD-RW
-        const DvdRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RW;
+        const DvdRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RW as _;
         /// Can read DVD+RW
-        const DvdPlusRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RPW;
+        const DvdPlusRw = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_DVD_RPW as _;
         /// Can read C2 errors
-        const C2Errors = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_C2_ERRS;
+        const C2Errors = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_C2_ERRS as _;
         /// Can read Mode 2 Form 1 (VCD)
-        const Mode2Form1 = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MODE2_FORM1;
+        const Mode2Form1 = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MODE2_FORM1 as _;
         /// Can read Mode 2 Form 2 (VCD)
-        const Mode2Form2 = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MODE2_FORM2;
+        const Mode2Form2 = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MODE2_FORM2 as _;
         /// Can read MCN
-        const Mcn = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MCN;
+        const Mcn = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_MCN as _;
         /// Can read ISRC
-        const Isrc = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_ISRC;
+        const Isrc = libcdio_sys::cdio_drive_cap_read_t_CDIO_DRIVE_CAP_READ_ISRC as _;
     }
 }
+// the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
     /// Write capabilities of the drive
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct WriteCapabilities: u32 {
         /// Can write CD-R
-        const CdR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_CD_R;
+        const CdR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_CD_R as _;
         /// Can write CD-RW
-        const CdRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_CD_RW;
+        const CdRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_CD_RW as _;
         /// Can write DVD-R
-        const DvdR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_R;
+        const DvdR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_R as _;
         /// Can write DVD+R
-        const DvdPlusR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_PR;
+        const DvdPlusR = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_PR as _;
         /// Can write DVD-RAM
-        const DvdRam = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RAM;
+        const DvdRam = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RAM as _;
         /// Can write DVD-RW
-        const DvdRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RW;
+        const DvdRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RW as _;
         /// Can write DVD+RW
-        const DvdPlusRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RPW;
+        const DvdPlusRw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_DVD_RPW as _;
         /// Can write MRW (Mount Rainier)
-        const Mrw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_MT_RAINIER;
+        const Mrw = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_MT_RAINIER as _;
         /// Can write using Burn proof
-        const BurnProof = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_BURN_PROOF;
+        const BurnProof = libcdio_sys::cdio_drive_cap_write_t_CDIO_DRIVE_CAP_WRITE_BURN_PROOF as _;
     }
 }
 
