@@ -20,7 +20,6 @@
 use std::{
     ffi::{CStr, CString},
     io,
-    path::Path,
     ptr::NonNull,
 };
 
@@ -44,9 +43,11 @@ pub struct Iso9660EntryReader<'a> {
 
 impl Iso9660 {
     /// Read directory at `path` and return a list of entries.
+    ///
+    /// Only '/' may be used for path separators.
     /// Returns `None` on error.
-    pub fn read_dir(&self, path: &Path) -> Option<Vec<Iso9660Entry<'_>>> {
-        let path = CString::new(path.to_str()?).ok()?;
+    pub fn read_dir(&self, path: &str) -> Option<Vec<Iso9660Entry<'_>>> {
+        let path = CString::new(path).ok()?;
         let dirlist = unsafe { libcdio_sys::iso9660_ifs_readdir(self.ptr.as_ptr(), path.as_ptr()) };
         if dirlist.is_null() {
             return None;
@@ -67,8 +68,8 @@ impl Iso9660 {
     }
 
     /// Return entry for `path`. `None` is returned on error.
-    pub fn entry(&self, path: &Path) -> Option<Iso9660Entry<'_>> {
-        let path = CString::new(path.to_str()?).ok()?;
+    pub fn entry(&self, path: &str) -> Option<Iso9660Entry<'_>> {
+        let path = CString::new(path).ok()?;
         let stat = unsafe { libcdio_sys::iso9660_ifs_stat(self.ptr.as_ptr(), path.as_ptr()) };
 
         Some(Iso9660Entry {
@@ -227,14 +228,14 @@ mod tests {
     #[test]
     fn read_dir() {
         let iso = Iso9660::new(test_joliet_file()).unwrap();
-        let entries = iso.read_dir(Path::new("/")).unwrap();
+        let entries = iso.read_dir("/").unwrap();
         assert_eq!(entries.len(), 3);
     }
 
     #[test]
     fn filename() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entries = iso.read_dir(Path::new("/")).unwrap();
+        let entries = iso.read_dir("/").unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename_raw().unwrap()).collect();
         assert_eq!(
             &names,
@@ -245,7 +246,7 @@ mod tests {
     #[test]
     fn filename_translated() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entries = iso.read_dir(Path::new("/")).unwrap();
+        let entries = iso.read_dir("/").unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename().unwrap()).collect();
         assert_eq!(
             &names,
@@ -256,38 +257,38 @@ mod tests {
     #[test]
     fn entry() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry(Path::new("/copy")).unwrap();
+        let entry = iso.entry("/copy").unwrap();
         assert_eq!(entry.filename().unwrap(), "copy");
     }
 
     #[test]
     fn total_size() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry(Path::new("/COPYING")).unwrap();
+        let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(entry.total_size(), 17992);
     }
 
     #[test]
     fn lsn() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry(Path::new("/COPYING")).unwrap();
+        let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(entry.lsn(), 27);
     }
 
     #[test]
     fn is_dir() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let file = iso.entry(Path::new("/COPYING")).unwrap();
+        let file = iso.entry("/COPYING").unwrap();
         assert!(!file.is_dir());
 
-        let dir = iso.entry(Path::new("/copy")).unwrap();
+        let dir = iso.entry("/copy").unwrap();
         assert!(dir.is_dir());
     }
 
     #[test]
     fn timestamp() {
         let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry(Path::new("/COPYING")).unwrap();
+        let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(
             entry.timestamp().unwrap(),
             datetime!(2005-03-05 20:55:51.0 +05:30:00),
@@ -297,7 +298,7 @@ mod tests {
     #[test]
     fn read() {
         let iso = Iso9660::new(Path::new("../test-data/xa.iso")).unwrap();
-        let entry = iso.entry(Path::new("copying")).unwrap();
+        let entry = iso.entry("copying").unwrap();
         let gpl = std::fs::read_to_string("../COPYING").unwrap();
         let mut reader = entry.reader();
 

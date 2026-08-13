@@ -21,7 +21,6 @@ use std::{
     ffi::{CStr, CString},
     io,
     marker::PhantomData,
-    path::Path,
     ptr::NonNull,
 };
 
@@ -71,10 +70,13 @@ impl Udf {
         Some(UdfEntry::new(NonNull::new(entry)?))
     }
 
-    /// Return entry for `path`. `None` is returned on error.
-    pub fn entry(&self, path: &Path) -> Option<UdfEntry<'_>> {
+    /// Return entry for `path`.
+    ///
+    /// Only '/' may be used for path separators.
+    /// `None` is returned on error.
+    pub fn entry(&self, path: &str) -> Option<UdfEntry<'_>> {
         let root = self.root()?;
-        let path = CString::new(path.to_str()?).ok()?;
+        let path = CString::new(path).ok()?;
         let entry = unsafe { libcdio_sys::udf_fopen(root.entry.as_ptr(), path.as_ptr()) };
 
         Some(UdfEntry::new(NonNull::new(entry)?))
@@ -371,6 +373,6 @@ mod tests {
     #[test]
     fn entry() {
         let udf = Udf::new(test_udf_file1()).unwrap();
-        udf.entry(Path::new("/licenses/COPYING.LESSER")).unwrap();
+        udf.entry("/licenses/COPYING.LESSER").unwrap();
     }
 }

@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn xa() {
         let iso = Iso9660::new(Path::new("../test-data/xa.iso")).unwrap();
-        let entry = iso.entry(Path::new("/copying")).unwrap();
+        let entry = iso.entry("/copying").unwrap();
         let xa = entry.xa().unwrap();
         assert_eq!(xa.file_num, 0);
         assert_eq!(xa.group_id, 3000);
