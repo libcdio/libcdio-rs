@@ -51,44 +51,6 @@ pub struct Iso9660 {
     pub(crate) ptr: NonNull<iso9660_t>,
 }
 
-/// A builder for [Iso9660].
-#[derive(Clone, Debug)]
-pub struct Iso9660Builder<'a> {
-    extensions: Iso9660Extensions,
-    path: &'a Path,
-}
-
-bitflags! {
-    /// ISO 9660 Extensions.
-    /// # Examples
-    /// ```rust, no_run
-    /// use libcdio_rs::iso9660::Iso9660Extensions;
-    /// // pick HighSierra and RockRidge
-    /// let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
-    /// // pick everything except RockRidge
-    /// let extensions = Iso9660Extensions::all() - Iso9660Extensions::RockRidge;
-    /// // pick nothing
-    /// let extensions = Iso9660Extensions::empty();
-    /// ```
-    #[derive(Clone, Copy, Debug)]
-    pub struct Iso9660Extensions: u8 {
-        const HighSierra = iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA as _;
-        const JolietLevel1 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1 as _;
-        const JolietLevel2 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2 as _;
-        const JolietLevel3 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3 as _;
-        const RockRidge = iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE as _;
-    }
-}
-
-/// Joliet level.
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
-pub enum JolietLevel {
-    One = 1,
-    Two,
-    Three,
-}
-
 impl Iso9660 {
     /// The number of bytes used by an ISO 9660 block.
     pub const BLOCK_SIZE: usize = 2048;
@@ -101,6 +63,18 @@ impl Iso9660 {
         Self::open(&path, Iso9660Extensions::all())
     }
 
+    fn open(path: &CStr, extensions: Iso9660Extensions) -> Option<Self> {
+        init_logger();
+
+        // SAFETY: path is duplicated by the method, so its safe to drop afterwards
+        let iso9660_ptr =
+            unsafe { libcdio_sys::iso9660_open_ext(path.as_ptr(), extensions.bits()) };
+
+        Some(Self {
+            ptr: NonNull::new(iso9660_ptr)?,
+        })
+    }
+
     /// Returns a builder object. See [`Iso9660Builder`].
     pub fn builder<'a>(path: &'a Path) -> Iso9660Builder<'a> {
         Iso9660Builder::new(path)
@@ -109,6 +83,32 @@ impl Iso9660 {
     /// Returns the Application Identifier.
     pub fn application(&self) -> Option<String> {
         self.get_identifier(libcdio_sys::iso9660_ifs_get_application_id)
+    }
+
+    /// Helper for the methods that return iso9660 identifiers.
+    fn get_identifier(
+        &self,
+        func: unsafe extern "C" fn(*mut iso9660_t, *mut *mut c_char) -> bool,
+    ) -> Option<String> {
+        let mut identifier_ptr = ptr::null_mut();
+
+        // SAFETY: The method allocates a string and points the identifier_ptr to it.
+        // It must be freed after use.
+        let success = unsafe { func(self.ptr.as_ptr(), &raw mut identifier_ptr) };
+        if !success || identifier_ptr.is_null() {
+            return None;
+        }
+
+        let identifier = unsafe { CStr::from_ptr(identifier_ptr) };
+        let identifier = identifier.to_string_lossy().to_string();
+
+        // SAFETY: application_id has been duplicated into a Rust string
+        // above, thus safe to free
+        unsafe {
+            libcdio_sys::cdio_free(identifier_ptr.cast());
+        }
+
+        Some(identifier)
     }
 
     /// Returns the Data Preparer Identifier.
@@ -150,44 +150,19 @@ impl Iso9660 {
 
         Some(joliet_level)
     }
+}
 
-    fn open(path: &CStr, extensions: Iso9660Extensions) -> Option<Self> {
-        init_logger();
-
-        // SAFETY: path is duplicated by the method, so its safe to drop afterwards
-        let iso9660_ptr =
-            unsafe { libcdio_sys::iso9660_open_ext(path.as_ptr(), extensions.bits()) };
-
-        Some(Self {
-            ptr: NonNull::new(iso9660_ptr)?,
-        })
+impl Drop for Iso9660 {
+    fn drop(&mut self) {
+        let _ = unsafe { libcdio_sys::iso9660_close(self.ptr.as_ptr()) };
     }
+}
 
-    /// Helper for the methods that return iso9660 identifiers.
-    fn get_identifier(
-        &self,
-        func: unsafe extern "C" fn(*mut iso9660_t, *mut *mut c_char) -> bool,
-    ) -> Option<String> {
-        let mut identifier_ptr = ptr::null_mut();
-
-        // SAFETY: The method allocates a string and points the identifier_ptr to it.
-        // It must be freed after use.
-        let success = unsafe { func(self.ptr.as_ptr(), &raw mut identifier_ptr) };
-        if !success || identifier_ptr.is_null() {
-            return None;
-        }
-
-        let identifier = unsafe { CStr::from_ptr(identifier_ptr) };
-        let identifier = identifier.to_string_lossy().to_string();
-
-        // SAFETY: application_id has been duplicated into a Rust string
-        // above, thus safe to free
-        unsafe {
-            libcdio_sys::cdio_free(identifier_ptr.cast());
-        }
-
-        Some(identifier)
-    }
+/// A builder for [Iso9660].
+#[derive(Clone, Debug)]
+pub struct Iso9660Builder<'a> {
+    extensions: Iso9660Extensions,
+    path: &'a Path,
 }
 
 impl<'a> Iso9660Builder<'a> {
@@ -213,10 +188,35 @@ impl<'a> Iso9660Builder<'a> {
     }
 }
 
-impl Drop for Iso9660 {
-    fn drop(&mut self) {
-        let _ = unsafe { libcdio_sys::iso9660_close(self.ptr.as_ptr()) };
+bitflags! {
+    /// ISO 9660 Extensions.
+    /// # Examples
+    /// ```rust, no_run
+    /// use libcdio_rs::iso9660::Iso9660Extensions;
+    /// // pick HighSierra and RockRidge
+    /// let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
+    /// // pick everything except RockRidge
+    /// let extensions = Iso9660Extensions::all() - Iso9660Extensions::RockRidge;
+    /// // pick nothing
+    /// let extensions = Iso9660Extensions::empty();
+    /// ```
+    #[derive(Clone, Copy, Debug)]
+    pub struct Iso9660Extensions: u8 {
+        const HighSierra = iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA as _;
+        const JolietLevel1 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1 as _;
+        const JolietLevel2 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2 as _;
+        const JolietLevel3 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3 as _;
+        const RockRidge = iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE as _;
     }
+}
+
+/// Joliet level.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
+pub enum JolietLevel {
+    One = 1,
+    Two,
+    Three,
 }
 
 #[cfg(test)]

@@ -28,19 +28,6 @@ use time::OffsetDateTime;
 
 use crate::iso9660::{Iso9660, ds, util};
 
-/// ISO 9660 file/directory entry.
-pub struct Iso9660Entry<'a> {
-    /// The parent ISO 9660 object
-    pub(crate) iso: &'a Iso9660,
-    pub(crate) stat: NonNull<iso9660_stat_s>,
-}
-
-/// A type that implements [`io::Read`], for reading an ISO9660 entry.
-pub struct Iso9660EntryReader<'a> {
-    bytes_read: usize,
-    entry: &'a Iso9660Entry<'a>,
-}
-
 impl Iso9660 {
     /// Read directory at `path` and return a list of entries.
     ///
@@ -77,6 +64,13 @@ impl Iso9660 {
             stat: NonNull::new(stat)?,
         })
     }
+}
+
+/// ISO 9660 file/directory entry.
+pub struct Iso9660Entry<'a> {
+    /// The parent ISO 9660 object
+    pub(crate) iso: &'a Iso9660,
+    pub(crate) stat: NonNull<iso9660_stat_s>,
 }
 
 impl Iso9660Entry<'_> {
@@ -158,6 +152,12 @@ impl Drop for Iso9660Entry<'_> {
     fn drop(&mut self) {
         unsafe { libcdio_sys::iso9660_stat_free(self.stat.as_ptr()) }
     }
+}
+
+/// A type that implements [`io::Read`], for reading an ISO9660 entry.
+pub struct Iso9660EntryReader<'a> {
+    bytes_read: usize,
+    entry: &'a Iso9660Entry<'a>,
 }
 
 impl io::Read for Iso9660EntryReader<'_> {

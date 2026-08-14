@@ -21,36 +21,6 @@ use bitflags::bitflags;
 
 use crate::iso9660::entry::Iso9660Entry;
 
-/// CD-ROM XA (eXtended Architecture) attributes
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct CdRomXa {
-    pub file_attr: XaFileAttributes,
-    pub file_num: u8,
-    pub group_id: u16,
-    pub user_id: u16,
-    total_size: u64,
-}
-
-bitflags! {
-    /// XA File Attributes.
-    /// For more information: https://psx-spx.consoledev.net/cdromformat/#cdrom-iso-file-and-directory-descriptors
-    #[derive(Clone, Copy, Debug)]
-    pub struct XaFileAttributes: u16 {
-        const OwnerRead = 1 << 0;
-        const OwnerExecute = 1 << 2;
-        const GroupRead = 1 << 4;
-        const GroupExecute = 1 << 6;
-        const WorldRead = 1 << 8;
-        const WorldExecute = 1 << 10;
-        const Mode2 = 1 << 11;
-        const Mode2Form2 = 1 << 12;
-        const Interleaved = 1 << 13;
-        const Cdda = 1 << 14;
-        const Directory = 1 << 15;
-    }
-}
-
 impl Iso9660Entry<'_> {
     /// Return CD-ROM XA (eXtended Architecture) attributes.
     /// `None` is returned if the attributes are not present.
@@ -73,6 +43,17 @@ impl Iso9660Entry<'_> {
     }
 }
 
+/// CD-ROM XA (eXtended Architecture) attributes
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct CdRomXa {
+    pub file_attr: XaFileAttributes,
+    pub file_num: u8,
+    pub group_id: u16,
+    pub user_id: u16,
+    total_size: u64,
+}
+
 impl CdRomXa {
     /// Return multi extent size.
     /// Returns `None` if not using Mode2/Form2 encoding.
@@ -88,6 +69,25 @@ impl CdRomXa {
         let total_sectors = self.total_size.div_ceil(ISO_BLOCK_BYTES);
 
         Some(total_sectors * MODE2FORM2_SECTOR_BYTES)
+    }
+}
+
+bitflags! {
+    /// XA File Attributes.
+    /// For more information: https://psx-spx.consoledev.net/cdromformat/#cdrom-iso-file-and-directory-descriptors
+    #[derive(Clone, Copy, Debug)]
+    pub struct XaFileAttributes: u16 {
+        const OwnerRead = 1 << 0;
+        const OwnerExecute = 1 << 2;
+        const GroupRead = 1 << 4;
+        const GroupExecute = 1 << 6;
+        const WorldRead = 1 << 8;
+        const WorldExecute = 1 << 10;
+        const Mode2 = 1 << 11;
+        const Mode2Form2 = 1 << 12;
+        const Interleaved = 1 << 13;
+        const Cdda = 1 << 14;
+        const Directory = 1 << 15;
     }
 }
 

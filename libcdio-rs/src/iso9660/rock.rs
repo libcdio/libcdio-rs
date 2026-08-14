@@ -25,26 +25,6 @@ use time::OffsetDateTime;
 
 use crate::iso9660::{Iso9660, entry::Iso9660Entry, util};
 
-/// ISO 9660 Rock Ridge extensions.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct RockRidge {
-    /// Create time
-    pub create_time: Option<OffsetDateTime>,
-    /// Group ID
-    pub group_id: u32,
-    /// Number of hard links
-    pub hard_links: u32,
-    /// Unix file mode
-    pub mode: Mode,
-    /// Modify time
-    pub modify_time: Option<OffsetDateTime>,
-    /// Symlink target
-    pub symlink_to: Option<String>,
-    /// User ID
-    pub user_id: u32,
-}
-
 impl Iso9660 {
     /// Checks if any file has Rock Ridge extensions. Returns `None` on error.
     /// This can be time consuming, therefore `file_limit` can be provided to
@@ -93,6 +73,26 @@ impl Iso9660Entry<'_> {
             user_id: rock.st_uid,
         })
     }
+}
+
+/// ISO 9660 Rock Ridge extensions.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct RockRidge {
+    /// Create time
+    pub create_time: Option<OffsetDateTime>,
+    /// Group ID
+    pub group_id: u32,
+    /// Number of hard links
+    pub hard_links: u32,
+    /// Unix file mode
+    pub mode: Mode,
+    /// Modify time
+    pub modify_time: Option<OffsetDateTime>,
+    /// Symlink target
+    pub symlink_to: Option<String>,
+    /// User ID
+    pub user_id: u32,
 }
 
 fn convert_rock_timefield(field: iso_rock_time_s) -> Option<OffsetDateTime> {
