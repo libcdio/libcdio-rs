@@ -41,24 +41,41 @@ impl Mmc {
         Ok(())
     }
 
+    /// Set power state.
+    pub fn set_power_state(&self, state: PowerCondition) -> Result<(), MmcSetPowerStateError> {
+        self.start_stop_unit(StartStopOperation::Power(state))?;
+        Ok(())
+    }
+
     fn start_stop_unit(&self, operation: StartStopOperation) -> Result<(), MmcStartStopError> {
         let mut cdb = Cdb::default();
 
         cdb[0] = MmcCommand::StartStopUnit as u8;
         cdb[1] = 0; // not using the immediate bit for now
         if let StartStopOperation::Jump { layer_number } = operation {
-            cdb[3] = layer_number & 0b11
+            cdb[3] = layer_number & LAYER_NUM_BITMASK;
+            cdb[4] |= 1 << FORMAT_LAYER_BITPOS;
         }
-        cdb[4] = match operation {
+        // Sets the LoEj and Start fields
+        // as described in 6.42.3.1 of MMC-6 2g
+        cdb[4] |= match operation {
             StartStopOperation::StartDisc => 0b01,
             StartStopOperation::EjectDisc => 0b10,
             StartStopOperation::LoadStartDisc | StartStopOperation::Jump { .. } => 0b11,
             _ => 0b00,
         };
+        if let StartStopOperation::Power(pow_cond) = operation {
+            cdb[4] |= (pow_cond as u8 & POWER_COND_BITMASK) << POWER_COND_BITPOS;
+        }
 
         self.run_command(Some(MmcDirection::Write), &mut [], cdb)?;
 
-        Ok(())
+        return Ok(());
+
+        const LAYER_NUM_BITMASK: u8 = 0b11;
+        const FORMAT_LAYER_BITPOS: usize = 2;
+        const POWER_COND_BITMASK: u8 = 0b1111;
+        const POWER_COND_BITPOS: usize = 4;
     }
 }
 
@@ -72,6 +89,13 @@ pub struct MmcEjectError {
 /// could not close tray of the MMC device
 #[derive(Debug, Display, Error)]
 pub struct MmcCloseTrayError {
+    #[from]
+    pub source: MmcStartStopError,
+}
+
+/// could not set power state of MMC device
+#[derive(Debug, Display, Error)]
+pub struct MmcSetPowerStateError {
     #[from]
     pub source: MmcStartStopError,
 }
@@ -103,7 +127,7 @@ enum StartStopOperation {
 
 /// A power state as defined under MMC `START STOP UNIT`
 #[allow(unused)]
-enum PowerCondition {
+pub enum PowerCondition {
     Idle = 0x2,
     Standby = 0x3,
     Sleep = 0x5,
