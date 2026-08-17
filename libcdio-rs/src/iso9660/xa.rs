@@ -93,7 +93,7 @@ bitflags! {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::PathBuf;
 
     use crate::iso9660::Iso;
 
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn xa() {
-        let iso = Iso::new(Path::new("../test-data/xa.iso")).unwrap();
+        let iso = Iso::new(PathBuf::from("../test-data/xa.iso")).unwrap();
         let entry = iso.entry("/copying").unwrap();
         let xa = entry.xa().unwrap();
         assert_eq!(xa.file_num, 0);

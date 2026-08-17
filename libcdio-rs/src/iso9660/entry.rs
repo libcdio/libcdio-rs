@@ -216,7 +216,7 @@ impl io::Seek for IsoEntryReader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read, path::Path};
+    use std::{io::Read, path::PathBuf};
 
     use time::macros::datetime;
 
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn read() {
-        let iso = Iso::new(Path::new("../test-data/xa.iso")).unwrap();
+        let iso = Iso::new(PathBuf::from("../test-data/xa.iso")).unwrap();
         let entry = iso.entry("copying").unwrap();
         let gpl = std::fs::read_to_string("../COPYING").unwrap();
         let mut reader = entry.reader();

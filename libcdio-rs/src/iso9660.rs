@@ -24,11 +24,14 @@ mod xa;
 
 pub use entry::*;
 pub use rock::*;
+use thiserror::Error;
+use tracing::error;
 pub use xa::*;
 
 use std::{
-    ffi::{CStr, CString, c_char},
-    path::Path,
+    error::Error,
+    ffi::{CStr, CString, OsString, c_char},
+    path::{Path, PathBuf},
     ptr::{self, NonNull},
 };
 
@@ -55,26 +58,30 @@ impl Iso {
 
     /// Open an ISO 9660 image for reading at given `path`, with all iso9660
     /// extension flags enabled. Returns `None` on error.
-    pub fn new(path: &Path) -> Option<Self> {
-        let path = CString::new(path.to_str()?).ok()?;
-
-        Self::open(&path, IsoExtensions::all())
+    pub fn new(path: PathBuf) -> Result<Self, IsoOpenError> {
+        Self::open(path, IsoExtensions::all())
     }
 
-    fn open(path: &CStr, extensions: IsoExtensions) -> Option<Self> {
+    fn open(path: PathBuf, extensions: IsoExtensions) -> Result<Self, IsoOpenError> {
         init_logger();
+
+        let path = CString::new(path.into_os_string().as_encoded_bytes())
+            .inspect_err(|err| error!(%err, "invalid ISO 9660 path"))
+            .map_err(|err| IsoOpenError::new(err.clone().into_vec(), err.into()))?;
 
         // SAFETY: path is duplicated by the method, so its safe to drop afterwards
         let iso9660_ptr =
             unsafe { libcdio_sys::iso9660_open_ext(path.as_ptr(), extensions.bits()) };
 
-        Some(Self {
-            ptr: NonNull::new(iso9660_ptr)?,
-        })
+        NonNull::new(iso9660_ptr)
+            .map(|ptr| Self { ptr })
+            .ok_or_else(|| {
+                IsoOpenError::new(path.into_bytes(), "iso9660_open_ext() returned NULL".into())
+            })
     }
 
     /// Returns a builder object. See [`IsoBuilder`].
-    pub fn builder<'a>(path: &'a Path) -> IsoBuilder<'a> {
+    pub fn builder(path: PathBuf) -> IsoBuilder {
         IsoBuilder::new(path)
     }
 
@@ -156,15 +163,41 @@ impl Drop for Iso {
     }
 }
 
-/// A builder for [Iso].
-#[derive(Clone, Debug)]
-pub struct IsoBuilder<'a> {
-    extensions: IsoExtensions,
-    path: &'a Path,
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct IsoOpenError(Box<OpenErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("could not open ISO 9660 file at `{path}`")]
+struct OpenErrRepr {
+    path: PathBuf,
+    source: Box<dyn Error + Send + Sync>,
 }
 
-impl<'a> IsoBuilder<'a> {
-    pub fn new(path: &'a Path) -> Self {
+impl IsoOpenError {
+    /// Returns the path of the ISO 9660 file.
+    pub fn path(&self) -> &Path {
+        &self.0.path
+    }
+
+    fn new(path_bytes: Vec<u8>, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(OpenErrRepr {
+            // SAFETY: path_bytes originate from a PathBuf
+            path: unsafe { OsString::from_encoded_bytes_unchecked(path_bytes) }.into(),
+            source,
+        }))
+    }
+}
+
+/// A builder for [Iso].
+#[derive(Clone, Debug)]
+pub struct IsoBuilder {
+    extensions: IsoExtensions,
+    path: PathBuf,
+}
+
+impl IsoBuilder {
+    pub fn new(path: PathBuf) -> Self {
         Self {
             path,
             extensions: IsoExtensions::empty(),
@@ -179,10 +212,8 @@ impl<'a> IsoBuilder<'a> {
 
     /// Build the iso9660 type with the set options.
     /// Returns `None` on error.
-    pub fn build(self) -> Option<Iso> {
-        let path = CString::new(self.path.to_str()?).ok()?;
-
-        Iso::open(&path, self.extensions)
+    pub fn build(self) -> Result<Iso, IsoOpenError> {
+        Iso::open(self.path.to_owned(), self.extensions)
     }
 }
 
@@ -221,26 +252,25 @@ pub enum JolietLevel {
 pub(crate) mod tests {
     use super::*;
 
-    pub fn test_rockridge_file() -> &'static Path {
-        Path::new("../test-data/rock-ridge.iso")
+    pub fn test_rockridge_file() -> PathBuf {
+        PathBuf::from("../test-data/rock-ridge.iso")
     }
-    pub fn test_joliet_file() -> &'static Path {
-        Path::new("../test-data/joliet.iso")
+    pub fn test_joliet_file() -> PathBuf {
+        PathBuf::from("../test-data/joliet.iso")
     }
 
     #[test_log::test(test)]
     fn new() {
-        let iso = Iso::new(test_rockridge_file());
-        assert!(iso.is_some());
+        Iso::new(test_rockridge_file()).unwrap();
     }
 
     #[test]
     fn builder() {
         let extensions = IsoExtensions::HighSierra & IsoExtensions::RockRidge;
-        let iso = Iso::builder(test_rockridge_file())
+        Iso::builder(test_rockridge_file())
             .extensions(extensions)
-            .build();
-        assert!(iso.is_some());
+            .build()
+            .unwrap();
     }
 
     #[test]
