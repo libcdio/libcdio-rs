@@ -21,7 +21,7 @@ mod entry;
 
 pub use entry::UdfEntry;
 
-use std::{ffi::CString, path::Path, ptr::NonNull};
+use std::{ffi::CString, path::PathBuf, ptr::NonNull};
 
 use libcdio_sys::udf_t;
 
@@ -36,10 +36,10 @@ impl Udf {
     pub const BLOCK_SIZE: usize = 2048;
 
     /// Open a UDF file. `None` is returned on error.
-    pub fn new(path: &Path) -> Option<Self> {
+    pub fn new(path: PathBuf) -> Option<Self> {
         logging::init_logger();
 
-        let path = CString::new(path.to_str()?).ok()?;
+        let path = CString::new(path.into_os_string().as_encoded_bytes()).ok()?;
         // SAFETY: The returned udf object is owned by Self and freed during drop
         let udf = unsafe { libcdio_sys::udf_open(path.as_ptr()) };
 
@@ -59,8 +59,8 @@ impl Drop for Udf {
 mod tests {
     use super::*;
 
-    pub fn test_udf_file() -> &'static Path {
-        Path::new("../test-data/udf.iso")
+    pub fn test_udf_file() -> PathBuf {
+        PathBuf::from("../test-data/udf.iso")
     }
 
     #[test]

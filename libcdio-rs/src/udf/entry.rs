@@ -260,7 +260,7 @@ impl io::Seek for UdfEntryReader<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read, path::Path};
+    use std::{io::Read, path::PathBuf};
 
     use time::macros::datetime;
 
@@ -268,8 +268,8 @@ mod tests {
 
     use super::*;
 
-    fn test_udf_file1() -> &'static Path {
-        Path::new("../test-data/udf1.iso")
+    fn test_udf_file1() -> PathBuf {
+        PathBuf::from("../test-data/udf1.iso")
     }
 
     #[test]
