@@ -26,7 +26,7 @@ use std::{
 use libcdio_sys::{iso9660_stat_s, iso9660_stat_s__STAT_DIR};
 use time::OffsetDateTime;
 
-use crate::iso9660::{Iso, ds, util};
+use crate::iso9660::{Iso, util};
 
 impl Iso {
     /// Read directory at `path` and return a list of entries.
@@ -40,7 +40,7 @@ impl Iso {
             return None;
         }
         // SAFETY: dirlist is not null and the data will be owned by `IsoEntry`.
-        let dirlist = unsafe { ds::cdiolist_to_vec(dirlist) };
+        let dirlist = unsafe { util::cdiolist_to_vec(dirlist) };
         let dirlist = dirlist
             .into_iter()
             .filter_map(|entry| {

@@ -17,7 +17,6 @@
 
 //! ISO 9660 filesystem related routines.
 
-mod ds;
 mod entry;
 mod rock;
 mod util;
