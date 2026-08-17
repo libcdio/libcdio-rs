@@ -35,14 +35,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use bitflags::bitflags;
-use libcdio_sys::{
-    iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3,
-    iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE, iso9660_t,
-};
+use libcdio_sys::iso9660_t;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::logging::init_logger;
@@ -59,30 +52,29 @@ impl Iso {
     /// Open an ISO 9660 image for reading at given `path`, with all iso9660
     /// extension flags enabled. Returns `None` on error.
     pub fn new(path: PathBuf) -> Result<Self, IsoOpenError> {
-        Self::open(path, IsoExtensions::all())
-    }
-
-    fn open(path: PathBuf, extensions: IsoExtensions) -> Result<Self, IsoOpenError> {
         init_logger();
 
         let path = CString::new(path.into_os_string().as_encoded_bytes())
             .inspect_err(|err| error!(%err, "invalid ISO 9660 path"))
             .map_err(|err| IsoOpenError::new(err.clone().into_vec(), err.into()))?;
-
-        // SAFETY: path is duplicated by the method, so its safe to drop afterwards
-        let iso9660_ptr =
-            unsafe { libcdio_sys::iso9660_open_ext(path.as_ptr(), extensions.bits()) };
+        let iso9660_ptr = unsafe {
+            // enable all extensions
+            libcdio_sys::iso9660_open_ext(
+                path.as_ptr(),
+                (libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE)
+                    as _,
+            )
+        };
 
         NonNull::new(iso9660_ptr)
             .map(|ptr| Self { ptr })
             .ok_or_else(|| {
                 IsoOpenError::new(path.into_bytes(), "iso9660_open_ext() returned NULL".into())
             })
-    }
-
-    /// Returns a builder object. See [`IsoBuilder`].
-    pub fn builder(path: PathBuf) -> IsoBuilder {
-        IsoBuilder::new(path)
     }
 
     /// Returns the Application Identifier.
@@ -142,9 +134,6 @@ impl Iso {
     }
 
     /// Returns the Joliet level.
-    /// # Note
-    /// [`Self`] must be constructed with the joliet extension enabled,
-    /// otherwise this will return `None` even if the file has Joliet.
     pub fn joliet_level(&self) -> Option<JolietLevel> {
         let joliet_level = unsafe { libcdio_sys::iso9660_ifs_get_joliet_level(self.ptr.as_ptr()) };
         if joliet_level == 0 {
@@ -189,56 +178,6 @@ impl IsoOpenError {
     }
 }
 
-/// A builder for [Iso].
-#[derive(Clone, Debug)]
-pub struct IsoBuilder {
-    extensions: IsoExtensions,
-    path: PathBuf,
-}
-
-impl IsoBuilder {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            extensions: IsoExtensions::empty(),
-        }
-    }
-
-    /// Set the extensions to be activated. This is set to be empty by default.
-    pub fn extensions(mut self, extensions: IsoExtensions) -> Self {
-        self.extensions = extensions;
-        self
-    }
-
-    /// Build the iso9660 type with the set options.
-    /// Returns `None` on error.
-    pub fn build(self) -> Result<Iso, IsoOpenError> {
-        Iso::open(self.path.to_owned(), self.extensions)
-    }
-}
-
-bitflags! {
-    /// ISO 9660 Extensions.
-    /// # Examples
-    /// ```rust, no_run
-    /// use libcdio_rs::iso9660::IsoExtensions;
-    /// // pick HighSierra and RockRidge
-    /// let extensions = IsoExtensions::HighSierra & IsoExtensions::RockRidge;
-    /// // pick everything except RockRidge
-    /// let extensions = IsoExtensions::all() - IsoExtensions::RockRidge;
-    /// // pick nothing
-    /// let extensions = IsoExtensions::empty();
-    /// ```
-    #[derive(Clone, Copy, Debug)]
-    pub struct IsoExtensions: u8 {
-        const HighSierra = iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA as _;
-        const JolietLevel1 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1 as _;
-        const JolietLevel2 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2 as _;
-        const JolietLevel3 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3 as _;
-        const RockRidge = iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE as _;
-    }
-}
-
 /// Joliet level.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
@@ -262,15 +201,6 @@ pub(crate) mod tests {
     #[test_log::test(test)]
     fn new() {
         Iso::new(test_rockridge_file()).unwrap();
-    }
-
-    #[test]
-    fn builder() {
-        let extensions = IsoExtensions::HighSierra & IsoExtensions::RockRidge;
-        Iso::builder(test_rockridge_file())
-            .extensions(extensions)
-            .build()
-            .unwrap();
     }
 
     #[test]
