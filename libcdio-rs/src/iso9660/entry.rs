@@ -119,29 +119,33 @@ pub struct IsoEntry<'a> {
 
 impl IsoEntry<'_> {
     /// Returns the raw filename of the entry.
-    /// Returns `None` if the filename has non UTF-8 characters or on error.
-    pub fn filename_raw(&self) -> Option<&str> {
+    pub fn filename_raw(&self) -> Result<&str, IsoInvalidEntryError> {
         // SAFETY: self.entry is not null since its behind a NonNull<T>
         let name = unsafe { (*self.stat.as_ptr()).filename.as_ptr() };
         if name.is_null() {
-            return None;
+            return Err(IsoInvalidEntryError::new(
+                Default::default(),
+                "iso9660_stat_s.filename is NULL".into(),
+            ));
         };
-        // SAFETY: The filename should be a null terminated string
-        let name = unsafe { CStr::from_ptr(name).to_str() };
 
-        name.inspect_err(|err| tracing::error!(%err)).ok()
+        // SAFETY: The filename should be a null terminated string
+        unsafe { CStr::from_ptr(name).to_str() }
+            .map_err(|err| IsoInvalidEntryError::new(Default::default(), err.into()))
     }
 
-    /// Returns a filename in a format used for a listing.
+    /// Returns the entry's filename in a listing format.
+    ///
     /// - Lowercase name if no Joliet Extension interpretation.
     /// - Remove trailing ;1 or .;1
     /// - Turn the other ; into version numbers.
-    ///
-    /// Returns `None` if the string has non UTF-8 characters or on error.
-    pub fn filename(&self) -> Option<String> {
+    pub fn filename(&self) -> Result<String, IsoInvalidEntryError> {
         let filename = unsafe { (*self.stat.as_ptr()).filename.as_ptr() };
         if filename.is_null() {
-            return None;
+            return Err(IsoInvalidEntryError::new(
+                Default::default(),
+                "iso9660_stat_s.filename is NULL".into(),
+            ));
         }
 
         let filename = unsafe { CStr::from_ptr(filename) };
@@ -155,9 +159,12 @@ impl IsoEntry<'_> {
                 joliet_level,
             )
         };
+        // iso9660_name_translate_ext will not return negative numbers,
+        // therefore the cast should be safe
         translated_name.truncate(len as usize);
 
-        String::from_utf8(translated_name).ok()
+        String::from_utf8(translated_name)
+            .map_err(|err| IsoInvalidEntryError::new(Default::default(), err.into()))
     }
 
     /// Multi-extent aware size, in bytes.
@@ -176,10 +183,10 @@ impl IsoEntry<'_> {
     }
 
     /// Returns the timestamp on the entry.
-    /// `None` if the timestamp is invalid.
-    pub fn timestamp(&self) -> Option<OffsetDateTime> {
+    pub fn timestamp(&self) -> Result<OffsetDateTime, IsoInvalidEntryError> {
         let tm = unsafe { (*self.stat.as_ptr()).tm };
-        util::convert_tm_local(tm).ok()
+        util::convert_tm_local(tm)
+            .map_err(|err| IsoInvalidEntryError::new(self.filename().unwrap_or_default(), err))
     }
 
     /// A type that implements [`io::Read`], for reading an ISO9660 entry.
@@ -195,6 +202,28 @@ impl IsoEntry<'_> {
 impl Drop for IsoEntry<'_> {
     fn drop(&mut self) {
         unsafe { libcdio_sys::iso9660_stat_free(self.stat.as_ptr()) }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct IsoInvalidEntryError(Box<InvalidEntryErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("inavlid data in ISO 9660 entry named `{name}`")]
+struct InvalidEntryErrRepr {
+    name: String,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl IsoInvalidEntryError {
+    /// Returns the name of the ISO 9660 entry.
+    pub fn name(&self) -> &str {
+        &self.0.name
+    }
+
+    fn new(name: String, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(InvalidEntryErrRepr { name, source }))
     }
 }
 
