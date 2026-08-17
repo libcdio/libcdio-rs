@@ -26,25 +26,25 @@ use std::{
 use libcdio_sys::{iso9660_stat_s, iso9660_stat_s__STAT_DIR};
 use time::OffsetDateTime;
 
-use crate::iso9660::{Iso9660, ds, util};
+use crate::iso9660::{Iso, ds, util};
 
-impl Iso9660 {
+impl Iso {
     /// Read directory at `path` and return a list of entries.
     ///
     /// Only '/' may be used for path separators.
     /// Returns `None` on error.
-    pub fn read_dir(&self, path: &str) -> Option<Vec<Iso9660Entry<'_>>> {
+    pub fn read_dir(&self, path: &str) -> Option<Vec<IsoEntry<'_>>> {
         let path = CString::new(path).ok()?;
         let dirlist = unsafe { libcdio_sys::iso9660_ifs_readdir(self.ptr.as_ptr(), path.as_ptr()) };
         if dirlist.is_null() {
             return None;
         }
-        // SAFETY: dirlist is not null and the data will be owned by `Iso9660Entry`.
+        // SAFETY: dirlist is not null and the data will be owned by `IsoEntry`.
         let dirlist = unsafe { ds::cdiolist_to_vec(dirlist) };
         let dirlist = dirlist
             .into_iter()
             .filter_map(|entry| {
-                Some(Iso9660Entry {
+                Some(IsoEntry {
                     iso: self,
                     stat: NonNull::new(entry.cast())?,
                 })
@@ -55,11 +55,11 @@ impl Iso9660 {
     }
 
     /// Return entry for `path`. `None` is returned on error.
-    pub fn entry(&self, path: &str) -> Option<Iso9660Entry<'_>> {
+    pub fn entry(&self, path: &str) -> Option<IsoEntry<'_>> {
         let path = CString::new(path).ok()?;
         let stat = unsafe { libcdio_sys::iso9660_ifs_stat(self.ptr.as_ptr(), path.as_ptr()) };
 
-        Some(Iso9660Entry {
+        Some(IsoEntry {
             iso: self,
             stat: NonNull::new(stat)?,
         })
@@ -67,13 +67,13 @@ impl Iso9660 {
 }
 
 /// ISO 9660 file/directory entry.
-pub struct Iso9660Entry<'a> {
+pub struct IsoEntry<'a> {
     /// The parent ISO 9660 object
-    pub(crate) iso: &'a Iso9660,
+    pub(crate) iso: &'a Iso,
     pub(crate) stat: NonNull<iso9660_stat_s>,
 }
 
-impl Iso9660Entry<'_> {
+impl IsoEntry<'_> {
     /// Returns the raw filename of the entry.
     /// Returns `None` if the filename has non UTF-8 characters or on error.
     pub fn filename_raw(&self) -> Option<&str> {
@@ -140,33 +140,33 @@ impl Iso9660Entry<'_> {
 
     /// A type that implements [`io::Read`], for reading an ISO9660 entry.
     /// Returns `None` on error.
-    pub fn reader(&self) -> Iso9660EntryReader<'_> {
-        Iso9660EntryReader {
+    pub fn reader(&self) -> IsoEntryReader<'_> {
+        IsoEntryReader {
             bytes_read: 0,
             entry: self,
         }
     }
 }
 
-impl Drop for Iso9660Entry<'_> {
+impl Drop for IsoEntry<'_> {
     fn drop(&mut self) {
         unsafe { libcdio_sys::iso9660_stat_free(self.stat.as_ptr()) }
     }
 }
 
 /// A type that implements [`io::Read`], for reading an ISO9660 entry.
-pub struct Iso9660EntryReader<'a> {
+pub struct IsoEntryReader<'a> {
     bytes_read: usize,
-    entry: &'a Iso9660Entry<'a>,
+    entry: &'a IsoEntry<'a>,
 }
 
-impl io::Read for Iso9660EntryReader<'_> {
+impl io::Read for IsoEntryReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let file_size = self.entry.total_size() as usize;
         let mut buf_read = 0;
         while self.bytes_read < file_size && buf_read < buf.len() {
-            let lsn = self.entry.lsn() + (self.bytes_read / Iso9660::BLOCK_SIZE) as i32;
-            let mut block = [0_u8; Iso9660::BLOCK_SIZE];
+            let lsn = self.entry.lsn() + (self.bytes_read / Iso::BLOCK_SIZE) as i32;
+            let mut block = [0_u8; Iso::BLOCK_SIZE];
             let ret = unsafe {
                 libcdio_sys::iso9660_iso_seek_read(
                     self.entry.iso.ptr.as_ptr(),
@@ -177,7 +177,7 @@ impl io::Read for Iso9660EntryReader<'_> {
             };
             // the returned value is either BLOCK_SIZE or zero on error, thus
             // excess bytes past the last read must be handled.
-            // cast is safe as Iso9660::BLOCK_SIZE < i16::MAX
+            // cast is safe as Iso::BLOCK_SIZE < i16::MAX
             if ret != block.len() as _ {
                 return Err(io::Error::other(format!(
                     "error reading block at lsn: {lsn}",
@@ -200,7 +200,7 @@ impl io::Read for Iso9660EntryReader<'_> {
     }
 }
 
-impl io::Seek for Iso9660EntryReader<'_> {
+impl io::Seek for IsoEntryReader<'_> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         self.bytes_read = match pos {
             io::SeekFrom::Start(offset) => offset as usize,
@@ -221,20 +221,20 @@ mod tests {
     use time::macros::datetime;
 
     use crate::iso9660::{
-        Iso9660,
+        Iso,
         tests::{test_joliet_file, test_rockridge_file},
     };
 
     #[test]
     fn read_dir() {
-        let iso = Iso9660::new(test_joliet_file()).unwrap();
+        let iso = Iso::new(test_joliet_file()).unwrap();
         let entries = iso.read_dir("/").unwrap();
         assert_eq!(entries.len(), 3);
     }
 
     #[test]
     fn filename() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entries = iso.read_dir("/").unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename_raw().unwrap()).collect();
         assert_eq!(
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn filename_translated() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entries = iso.read_dir("/").unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename().unwrap()).collect();
         assert_eq!(
@@ -256,28 +256,28 @@ mod tests {
 
     #[test]
     fn entry() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/copy").unwrap();
         assert_eq!(entry.filename().unwrap(), "copy");
     }
 
     #[test]
     fn total_size() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(entry.total_size(), 17992);
     }
 
     #[test]
     fn lsn() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(entry.lsn(), 27);
     }
 
     #[test]
     fn is_dir() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let file = iso.entry("/COPYING").unwrap();
         assert!(!file.is_dir());
 
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn timestamp() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         assert_eq!(
             entry.timestamp().unwrap(),
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn read() {
-        let iso = Iso9660::new(Path::new("../test-data/xa.iso")).unwrap();
+        let iso = Iso::new(Path::new("../test-data/xa.iso")).unwrap();
         let entry = iso.entry("copying").unwrap();
         let gpl = std::fs::read_to_string("../COPYING").unwrap();
         let mut reader = entry.reader();

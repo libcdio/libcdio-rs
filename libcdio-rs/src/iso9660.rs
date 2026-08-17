@@ -46,11 +46,11 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use crate::logging::init_logger;
 
 /// The main ISO 9660 type
-pub struct Iso9660 {
+pub struct Iso {
     pub(crate) ptr: NonNull<iso9660_t>,
 }
 
-impl Iso9660 {
+impl Iso {
     /// The number of bytes used by an ISO 9660 block.
     pub const BLOCK_SIZE: usize = 2048;
 
@@ -59,10 +59,10 @@ impl Iso9660 {
     pub fn new(path: &Path) -> Option<Self> {
         let path = CString::new(path.to_str()?).ok()?;
 
-        Self::open(&path, Iso9660Extensions::all())
+        Self::open(&path, IsoExtensions::all())
     }
 
-    fn open(path: &CStr, extensions: Iso9660Extensions) -> Option<Self> {
+    fn open(path: &CStr, extensions: IsoExtensions) -> Option<Self> {
         init_logger();
 
         // SAFETY: path is duplicated by the method, so its safe to drop afterwards
@@ -74,9 +74,9 @@ impl Iso9660 {
         })
     }
 
-    /// Returns a builder object. See [`Iso9660Builder`].
-    pub fn builder<'a>(path: &'a Path) -> Iso9660Builder<'a> {
-        Iso9660Builder::new(path)
+    /// Returns a builder object. See [`IsoBuilder`].
+    pub fn builder<'a>(path: &'a Path) -> IsoBuilder<'a> {
+        IsoBuilder::new(path)
     }
 
     /// Returns the Application Identifier.
@@ -151,39 +151,39 @@ impl Iso9660 {
     }
 }
 
-impl Drop for Iso9660 {
+impl Drop for Iso {
     fn drop(&mut self) {
         let _ = unsafe { libcdio_sys::iso9660_close(self.ptr.as_ptr()) };
     }
 }
 
-/// A builder for [Iso9660].
+/// A builder for [Iso].
 #[derive(Clone, Debug)]
-pub struct Iso9660Builder<'a> {
-    extensions: Iso9660Extensions,
+pub struct IsoBuilder<'a> {
+    extensions: IsoExtensions,
     path: &'a Path,
 }
 
-impl<'a> Iso9660Builder<'a> {
+impl<'a> IsoBuilder<'a> {
     pub fn new(path: &'a Path) -> Self {
         Self {
             path,
-            extensions: Iso9660Extensions::empty(),
+            extensions: IsoExtensions::empty(),
         }
     }
 
     /// Set the extensions to be activated. This is set to be empty by default.
-    pub fn extensions(mut self, extensions: Iso9660Extensions) -> Self {
+    pub fn extensions(mut self, extensions: IsoExtensions) -> Self {
         self.extensions = extensions;
         self
     }
 
     /// Build the iso9660 type with the set options.
     /// Returns `None` on error.
-    pub fn build(self) -> Option<Iso9660> {
+    pub fn build(self) -> Option<Iso> {
         let path = CString::new(self.path.to_str()?).ok()?;
 
-        Iso9660::open(&path, self.extensions)
+        Iso::open(&path, self.extensions)
     }
 }
 
@@ -191,16 +191,16 @@ bitflags! {
     /// ISO 9660 Extensions.
     /// # Examples
     /// ```rust, no_run
-    /// use libcdio_rs::iso9660::Iso9660Extensions;
+    /// use libcdio_rs::iso9660::IsoExtensions;
     /// // pick HighSierra and RockRidge
-    /// let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
+    /// let extensions = IsoExtensions::HighSierra & IsoExtensions::RockRidge;
     /// // pick everything except RockRidge
-    /// let extensions = Iso9660Extensions::all() - Iso9660Extensions::RockRidge;
+    /// let extensions = IsoExtensions::all() - IsoExtensions::RockRidge;
     /// // pick nothing
-    /// let extensions = Iso9660Extensions::empty();
+    /// let extensions = IsoExtensions::empty();
     /// ```
     #[derive(Clone, Copy, Debug)]
-    pub struct Iso9660Extensions: u8 {
+    pub struct IsoExtensions: u8 {
         const HighSierra = iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA as _;
         const JolietLevel1 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1 as _;
         const JolietLevel2 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2 as _;
@@ -231,14 +231,14 @@ pub(crate) mod tests {
 
     #[test_log::test(test)]
     fn new() {
-        let iso = Iso9660::new(test_rockridge_file());
+        let iso = Iso::new(test_rockridge_file());
         assert!(iso.is_some());
     }
 
     #[test]
     fn builder() {
-        let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
-        let iso = Iso9660::builder(test_rockridge_file())
+        let extensions = IsoExtensions::HighSierra & IsoExtensions::RockRidge;
+        let iso = Iso::builder(test_rockridge_file())
             .extensions(extensions)
             .build();
         assert!(iso.is_some());
@@ -246,13 +246,13 @@ pub(crate) mod tests {
 
     #[test]
     fn joliet_level() {
-        let iso = Iso9660::new(test_joliet_file()).unwrap();
+        let iso = Iso::new(test_joliet_file()).unwrap();
         assert_eq!(iso.joliet_level().unwrap(), JolietLevel::Three);
     }
 
     #[test]
     fn application() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(
             &iso.application().unwrap(),
             "K3B THE CD KREATOR VERSION 0.11.20 (C) 2003 SEBASTIAN TRUEG AND THE K3B TEAM"
@@ -261,31 +261,31 @@ pub(crate) mod tests {
 
     #[test]
     fn data_preparer() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.data_preparer().unwrap(), "K3b - Version 0.11.20",);
     }
 
     #[test]
     fn publisher() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.publisher().unwrap(), "Rocky Bernstein");
     }
 
     #[test]
     fn system() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.system().unwrap(), "LINUX");
     }
 
     #[test]
     fn volume() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.volume().unwrap(), "Rock Ridge Copy test");
     }
 
     #[test]
     fn volume_set() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert!(&iso.volume_set().is_none());
     }
 }

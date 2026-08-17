@@ -23,9 +23,9 @@ use file_mode::Mode;
 use libcdio_sys::{bool_3way_t_nope, bool_3way_t_yep, iso_rock_time_s};
 use time::OffsetDateTime;
 
-use crate::iso9660::{Iso9660, entry::Iso9660Entry, util};
+use crate::iso9660::{Iso, entry::IsoEntry, util};
 
-impl Iso9660 {
+impl Iso {
     /// Checks if any file has Rock Ridge extensions. Returns `None` on error.
     /// This can be time consuming, therefore `file_limit` can be provided to
     /// limit the number of files to scan.
@@ -42,7 +42,7 @@ impl Iso9660 {
     }
 }
 
-impl Iso9660Entry<'_> {
+impl IsoEntry<'_> {
     /// Rock Ridge extensions.
     /// `None` is returned if Rock ridge extensions are missing, or if it
     /// could not be determined.
@@ -124,24 +124,24 @@ mod tests {
 
     #[test]
     fn have_rock_ridge() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert!(iso.have_rock_ridge(None).unwrap());
     }
 
     #[test]
     fn rock_ridge() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         assert!(entry.rock_ridge().is_some());
 
-        let iso = Iso9660::new(test_joliet_file()).unwrap();
+        let iso = Iso::new(test_joliet_file()).unwrap();
         let entry = iso.entry("/libcdio/COPYING").unwrap();
         assert!(entry.rock_ridge().is_none());
     }
 
     #[test]
     fn mode() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
 
         let entry = iso.entry("/zero").unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn symlink_to() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
 
         let entry = iso.entry("/COPYING").unwrap();
         let rock = entry.rock_ridge().unwrap();
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn hard_links() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.hard_links, 1);
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn user_id() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.user_id, 0);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn group_id() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.group_id, 0);
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn time() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         let entry = iso.entry("/COPYING").unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(

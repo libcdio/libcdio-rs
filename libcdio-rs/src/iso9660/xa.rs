@@ -19,9 +19,9 @@
 
 use bitflags::bitflags;
 
-use crate::iso9660::entry::Iso9660Entry;
+use crate::iso9660::entry::IsoEntry;
 
-impl Iso9660Entry<'_> {
+impl IsoEntry<'_> {
     /// Return CD-ROM XA (eXtended Architecture) attributes.
     /// `None` is returned if the attributes are not present.
     pub fn xa(&self) -> Option<CdRomXa> {
@@ -95,13 +95,13 @@ bitflags! {
 mod tests {
     use std::path::Path;
 
-    use crate::iso9660::Iso9660;
+    use crate::iso9660::Iso;
 
     use super::*;
 
     #[test]
     fn xa() {
-        let iso = Iso9660::new(Path::new("../test-data/xa.iso")).unwrap();
+        let iso = Iso::new(Path::new("../test-data/xa.iso")).unwrap();
         let entry = iso.entry("/copying").unwrap();
         let xa = entry.xa().unwrap();
         assert_eq!(xa.file_num, 0);
