@@ -17,28 +17,31 @@
 
 //! Utility and data structure conversion routines.
 
-use std::ffi::c_void;
+use std::{error::Error, ffi::c_void};
 
 use libcdio_sys::_CdioList;
-use time::{Date, OffsetDateTime, Time, UtcOffset, error};
+use time::{Date, OffsetDateTime, Time, UtcOffset};
 
 /// Convert `tm` representing local time to a `OffsetDateTime`.
 pub(crate) fn convert_tm_local(
     tm: libcdio_sys::tm,
-) -> Result<OffsetDateTime, error::ComponentRange> {
+) -> Result<OffsetDateTime, Box<dyn Error + Send + Sync>> {
     const TM_YEAR_OFFSET: i32 = 1900;
     const TM_ORDINAL_DAY_OFFSET: u16 = 1;
     let date = Date::from_ordinal_date(
         tm.tm_year + TM_YEAR_OFFSET,
-        tm.tm_yday as u16 + TM_ORDINAL_DAY_OFFSET,
+        u16::try_from(tm.tm_yday)? + TM_ORDINAL_DAY_OFFSET,
     )?;
-    let time = Time::from_hms(tm.tm_hour as _, tm.tm_min as _, tm.tm_sec as _)?;
+    let time = Time::from_hms(
+        u8::try_from(tm.tm_hour)?,
+        u8::try_from(tm.tm_min)?,
+        u8::try_from(tm.tm_sec)?,
+    )?;
 
     Ok(OffsetDateTime::new_in_offset(
         date,
         time,
-        UtcOffset::local_offset_at(OffsetDateTime::new_utc(date, time))
-            .expect("could not obtain the system offset"),
+        UtcOffset::local_offset_at(OffsetDateTime::new_utc(date, time))?,
     ))
 }
 
