@@ -21,12 +21,11 @@ mod ds;
 mod entry;
 mod rock;
 mod util;
-pub mod xa;
+mod xa;
 
-pub use entry::Iso9660Entry;
-pub use rock::RockRidge;
-#[doc(inline)]
-pub use xa::CdRomXa;
+pub use entry::*;
+pub use rock::*;
+pub use xa::*;
 
 use std::{
     ffi::{CStr, CString, c_char},
