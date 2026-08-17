@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! ISO 9660 Rock Ridge extensions.
+//! Routines related to ISO 9660 Rock Ridge extensions.
 
 use std::{ffi::CStr, mem::MaybeUninit};
 
@@ -27,7 +27,8 @@ use time::OffsetDateTime;
 use crate::iso9660::{Iso, entry::IsoEntry, util};
 
 impl Iso {
-    /// Checks if any file has Rock Ridge extensions. Returns `None` on error.
+    /// Checks if any file has Rock Ridge extensions.
+    ///
     /// This can be time consuming, therefore `file_limit` can be provided to
     /// limit the number of files to scan.
     pub fn have_rock_ridge(&self, file_limit: Option<u64>) -> Result<bool, RockRidgeSearchError> {
@@ -49,16 +50,14 @@ impl Iso {
 pub struct RockRidgeSearchError;
 
 impl IsoEntry<'_> {
-    /// Rock Ridge extensions.
-    /// `None` is returned if Rock ridge extensions are missing, or if it
-    /// could not be determined.
-    pub fn rock_ridge(&self) -> Option<RockRidge> {
+    /// Returns the Rock Ridge attributes of the entry.
+    pub fn rock_ridge(&self) -> Option<RockRidgeAttributes> {
         let rock = unsafe { (*self.stat.as_ptr()).rr };
         if rock.b3_rock != bool_3way_t_yep {
             return None;
         }
 
-        Some(RockRidge {
+        Some(RockRidgeAttributes {
             create_time: convert_rock_timefield(rock.create),
             group_id: rock.st_gid,
             hard_links: rock.st_nlinks,
@@ -84,20 +83,13 @@ impl IsoEntry<'_> {
 /// ISO 9660 Rock Ridge extensions.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct RockRidge {
-    /// Create time
+pub struct RockRidgeAttributes {
     pub create_time: Option<OffsetDateTime>,
-    /// Group ID
     pub group_id: u32,
-    /// Number of hard links
     pub hard_links: u32,
-    /// Unix file mode
     pub mode: Mode,
-    /// Modify time
     pub modify_time: Option<OffsetDateTime>,
-    /// Symlink target
     pub symlink_to: Option<String>,
-    /// User ID
     pub user_id: u32,
 }
 

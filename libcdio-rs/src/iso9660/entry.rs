@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! ISO 9660 file/directory entry object.
+//! Routines related to ISO 9660 entries.
 
 use std::{
     error::Error,
@@ -31,10 +31,9 @@ use time::OffsetDateTime;
 use crate::iso9660::{Iso, util};
 
 impl Iso {
-    /// Read directory at `path` and return a list of entries.
+    /// Returns a list of entries under `path`.
     ///
-    /// Only '/' may be used for path separators.
-    /// Returns `None` on error.
+    /// Only Unix-style `/` may be used as a separator.
     pub fn read_dir(&self, path: String) -> Result<Vec<IsoEntry<'_>>, IsoGetEntryError> {
         let path = CString::new(path).map_err(|err| {
             IsoGetEntryError::new(
@@ -64,7 +63,7 @@ impl Iso {
         Ok(dirlist)
     }
 
-    /// Returns ISO 9660 entry at internal `path`.
+    /// Returns ISO 9660 entry at `path`.
     pub fn entry(&self, path: String) -> Result<IsoEntry<'_>, IsoGetEntryError> {
         let path = CString::new(path).map_err(|err| {
             IsoGetEntryError::new(
@@ -119,6 +118,8 @@ pub struct IsoEntry<'a> {
 
 impl IsoEntry<'_> {
     /// Returns the raw filename of the entry.
+    ///
+    /// See [`Self::filename()`]
     pub fn filename_raw(&self) -> Result<&str, IsoInvalidEntryError> {
         // SAFETY: self.entry is not null since its behind a NonNull<T>
         let name = unsafe { (*self.stat.as_ptr()).filename.as_ptr() };
@@ -134,11 +135,7 @@ impl IsoEntry<'_> {
             .map_err(|err| IsoInvalidEntryError::new(Default::default(), err.into()))
     }
 
-    /// Returns the entry's filename in a listing format.
-    ///
-    /// - Lowercase name if no Joliet Extension interpretation.
-    /// - Remove trailing ;1 or .;1
-    /// - Turn the other ; into version numbers.
+    /// Returns the entry's filename.
     pub fn filename(&self) -> Result<String, IsoInvalidEntryError> {
         let filename = unsafe { (*self.stat.as_ptr()).filename.as_ptr() };
         if filename.is_null() {
@@ -167,7 +164,7 @@ impl IsoEntry<'_> {
             .map_err(|err| IsoInvalidEntryError::new(Default::default(), err.into()))
     }
 
-    /// Multi-extent aware size, in bytes.
+    /// Returns Multi-extent aware file size, in bytes.
     pub fn total_size(&self) -> u64 {
         unsafe { (*self.stat.as_ptr()).total_size }
     }
@@ -177,7 +174,7 @@ impl IsoEntry<'_> {
         unsafe { (*self.stat.as_ptr()).lsn }
     }
 
-    /// Returns `true` if self is a directory.
+    /// Returns `true` if the stat represents a directory.
     pub fn is_dir(&self) -> bool {
         unsafe { (*self.stat.as_ptr()).type_ == iso9660_stat_s__STAT_DIR }
     }
@@ -189,8 +186,7 @@ impl IsoEntry<'_> {
             .map_err(|err| IsoInvalidEntryError::new(self.filename().unwrap_or_default(), err))
     }
 
-    /// A type that implements [`io::Read`], for reading an ISO9660 entry.
-    /// Returns `None` on error.
+    /// Returns a type that implements [`io::Read`], for reading an ISO 9660 entry.
     pub fn reader(&self) -> IsoEntryReader<'_> {
         IsoEntryReader {
             bytes_read: 0,
@@ -227,7 +223,7 @@ impl IsoInvalidEntryError {
     }
 }
 
-/// A type that implements [`io::Read`], for reading an ISO9660 entry.
+/// A type that implements [`io::Read`], for reading an ISO 9660 entry.
 pub struct IsoEntryReader<'a> {
     bytes_read: usize,
     entry: &'a IsoEntry<'a>,

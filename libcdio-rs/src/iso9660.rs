@@ -15,18 +15,16 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! ISO 9660 filesystem related routines.
+//! Routines related to the ISO 9660 filesystem.
+
+pub use entry::*;
+pub use rock::*;
+pub use xa::*;
 
 mod entry;
 mod rock;
 mod util;
 mod xa;
-
-pub use entry::*;
-pub use rock::*;
-use thiserror::Error;
-use tracing::error;
-pub use xa::*;
 
 use std::{
     error::Error,
@@ -37,10 +35,12 @@ use std::{
 
 use libcdio_sys::iso9660_t;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use thiserror::Error;
+use tracing::error;
 
 use crate::logging::init_logger;
 
-/// The main ISO 9660 type
+/// An ISO 9660 filesystem instance.
 pub struct Iso {
     pub(crate) ptr: NonNull<iso9660_t>,
 }
@@ -49,8 +49,7 @@ impl Iso {
     /// The number of bytes used by an ISO 9660 block.
     pub const BLOCK_SIZE: usize = 2048;
 
-    /// Open an ISO 9660 image for reading at given `path`, with all iso9660
-    /// extension flags enabled. Returns `None` on error.
+    /// Opens an ISO 9660 image at given `path`.
     pub fn new(path: PathBuf) -> Result<Self, IsoOpenError> {
         init_logger();
 
@@ -82,15 +81,14 @@ impl Iso {
         self.get_identifier(libcdio_sys::iso9660_ifs_get_application_id)
     }
 
-    /// Helper for the methods that return iso9660 identifiers.
+    /// Helper for the methods that return ISO 9660 identifiers.
     fn get_identifier(
         &self,
         func: unsafe extern "C" fn(*mut iso9660_t, *mut *mut c_char) -> bool,
     ) -> Option<String> {
         let mut identifier_ptr = ptr::null_mut();
 
-        // SAFETY: The method allocates a string and points the identifier_ptr to it.
-        // It must be freed after use.
+        // SAFETY: identifier_ptr must be freed after use.
         let success = unsafe { func(self.ptr.as_ptr(), &raw mut identifier_ptr) };
         if !success || identifier_ptr.is_null() {
             return None;
@@ -99,8 +97,7 @@ impl Iso {
         let identifier = unsafe { CStr::from_ptr(identifier_ptr) };
         let identifier = identifier.to_string_lossy().to_string();
 
-        // SAFETY: application_id has been duplicated into a Rust string
-        // above, thus safe to free
+        // SAFETY: identifier_ptr is already copied to a Rust string.
         unsafe {
             libcdio_sys::cdio_free(identifier_ptr.cast());
         }
