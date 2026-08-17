@@ -18,12 +18,14 @@
 //! ISO 9660 file/directory entry object.
 
 use std::{
+    error::Error,
     ffi::{CStr, CString},
     io,
     ptr::NonNull,
 };
 
 use libcdio_sys::{iso9660_stat_s, iso9660_stat_s__STAT_DIR};
+use thiserror::Error;
 use time::OffsetDateTime;
 
 use crate::iso9660::{Iso, util};
@@ -33,11 +35,19 @@ impl Iso {
     ///
     /// Only '/' may be used for path separators.
     /// Returns `None` on error.
-    pub fn read_dir(&self, path: &str) -> Option<Vec<IsoEntry<'_>>> {
-        let path = CString::new(path).ok()?;
+    pub fn read_dir(&self, path: &str) -> Result<Vec<IsoEntry<'_>>, IsoGetEntryError> {
+        let path = CString::new(path).map_err(|err| {
+            IsoGetEntryError::new(
+                String::from_utf8(err.clone().into_vec()).expect("path was a valid string"),
+                err.into(),
+            )
+        })?;
         let dirlist = unsafe { libcdio_sys::iso9660_ifs_readdir(self.ptr.as_ptr(), path.as_ptr()) };
         if dirlist.is_null() {
-            return None;
+            return Err(IsoGetEntryError::new(
+                path.into_string().expect("path was a valid string"),
+                "iso9660_ifs_readdir() returned NULL".into(),
+            ));
         }
         // SAFETY: dirlist is not null and the data will be owned by `IsoEntry`.
         let dirlist = unsafe { util::cdiolist_to_vec(dirlist) };
@@ -51,18 +61,52 @@ impl Iso {
             })
             .collect();
 
-        Some(dirlist)
+        Ok(dirlist)
     }
 
-    /// Return entry for `path`. `None` is returned on error.
-    pub fn entry(&self, path: &str) -> Option<IsoEntry<'_>> {
-        let path = CString::new(path).ok()?;
+    /// Returns ISO 9660 entry at internal `path`.
+    pub fn entry(&self, path: &str) -> Result<IsoEntry<'_>, IsoGetEntryError> {
+        let path = CString::new(path).map_err(|err| {
+            IsoGetEntryError::new(
+                String::from_utf8(err.clone().into_vec()).expect("path was a valid string"),
+                err.into(),
+            )
+        })?;
         let stat = unsafe { libcdio_sys::iso9660_ifs_stat(self.ptr.as_ptr(), path.as_ptr()) };
 
-        Some(IsoEntry {
-            iso: self,
-            stat: NonNull::new(stat)?,
-        })
+        NonNull::new(stat)
+            .ok_or_else(|| {
+                IsoGetEntryError::new(
+                    path.into_string().expect("path was a valid string"),
+                    "iso9660_ifs_stat() returned NULL".into(),
+                )
+            })
+            .map(|stat| IsoEntry { iso: self, stat })
+    }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct IsoGetEntryError(Box<GetEntryErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("could not get ISO 9660 entry at `{path}`")]
+struct GetEntryErrRepr {
+    path: String,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl IsoGetEntryError {
+    /// Returns the path of the ISO 9660 entry.
+    pub fn path(&self) -> &str {
+        &self.0.path
+    }
+
+    fn new(path: impl Into<String>, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(GetEntryErrRepr {
+            path: path.into(),
+            source,
+        }))
     }
 }
 
