@@ -21,6 +21,7 @@ use std::{ffi::CStr, mem::MaybeUninit};
 
 use file_mode::Mode;
 use libcdio_sys::{bool_3way_t_nope, bool_3way_t_yep, iso_rock_time_s};
+use thiserror::Error;
 use time::OffsetDateTime;
 
 use crate::iso9660::{Iso, entry::IsoEntry, util};
@@ -29,18 +30,23 @@ impl Iso {
     /// Checks if any file has Rock Ridge extensions. Returns `None` on error.
     /// This can be time consuming, therefore `file_limit` can be provided to
     /// limit the number of files to scan.
-    pub fn have_rock_ridge(&self, file_limit: Option<u64>) -> Option<bool> {
+    pub fn have_rock_ridge(&self, file_limit: Option<u64>) -> Result<bool, RockRidgeSearchError> {
         let file_limit = file_limit.unwrap_or(u64::MAX);
         let result = unsafe { libcdio_sys::iso9660_have_rr(self.ptr.as_ptr(), file_limit) };
 
         #[allow(non_upper_case_globals)]
         match result {
-            bool_3way_t_yep => Some(true),
-            bool_3way_t_nope => Some(false),
-            _ => None,
+            bool_3way_t_yep => Ok(true),
+            bool_3way_t_nope => Ok(false),
+            _ => Err(RockRidgeSearchError),
         }
     }
 }
+
+#[non_exhaustive]
+#[derive(Debug, Error)]
+#[error("error searching for rock ridge extensions: file limit reached")]
+pub struct RockRidgeSearchError;
 
 impl IsoEntry<'_> {
     /// Rock Ridge extensions.
