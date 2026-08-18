@@ -30,28 +30,6 @@ use time::OffsetDateTime;
 
 use crate::udf::Udf;
 
-/// A UDF file/directory entry.
-pub struct UdfEntry<'a> {
-    entry: NonNull<udf_dirent_s>,
-    /// The Group ID of the entry
-    pub gid: u32,
-    /// The User ID of the entry
-    pub uid: u32,
-    // udf_dirent_s internally holds references to udf_t
-    // thus it is valid for only as long as its parent
-    // udf_t is
-    _phantom: PhantomData<&'a udf_dirent_s>,
-}
-
-/// A type that implements [`io::Read`], to allow for reading the
-/// file corresponding to a [`UdfEntry`]
-// This is NOT thread safe, as udf_dirent_s internally holds
-// the current position
-pub struct UdfEntryReader<'a> {
-    bytes_read: usize,
-    entry: &'a UdfEntry<'a>,
-}
-
 impl Udf {
     /// Return the root entry of the filesystem.
     /// `None` is returned on error.
@@ -81,6 +59,19 @@ impl Udf {
 
         Some(UdfEntry::new(NonNull::new(entry)?))
     }
+}
+
+/// A UDF file/directory entry.
+pub struct UdfEntry<'a> {
+    entry: NonNull<udf_dirent_s>,
+    /// The Group ID of the entry
+    pub gid: u32,
+    /// The User ID of the entry
+    pub uid: u32,
+    // udf_dirent_s internally holds references to udf_t
+    // thus it is valid for only as long as its parent
+    // udf_t is
+    _phantom: PhantomData<&'a udf_dirent_s>,
 }
 
 impl UdfEntry<'_> {
@@ -183,6 +174,22 @@ impl UdfEntry<'_> {
     }
 }
 
+impl Drop for UdfEntry<'_> {
+    fn drop(&mut self) {
+        // SAFETY: Infallible function
+        let _ = unsafe { libcdio_sys::udf_dirent_free(self.entry.as_ptr()) };
+    }
+}
+
+/// A type that implements [`io::Read`], to allow for reading the
+/// file corresponding to a [`UdfEntry`]
+// This is NOT thread safe, as udf_dirent_s internally holds
+// the current position
+pub struct UdfEntryReader<'a> {
+    bytes_read: usize,
+    entry: &'a UdfEntry<'a>,
+}
+
 impl UdfEntryReader<'_> {
     /// Sets the internal position value that's stored the FFI boundary.
     // As of libcdio v2.3.0, the internal value i.e
@@ -202,13 +209,6 @@ impl UdfEntryReader<'_> {
                     .expect("block's byte offset should fit an `off_t`"),
             )
         };
-    }
-}
-
-impl Drop for UdfEntry<'_> {
-    fn drop(&mut self) {
-        // SAFETY: Infallible function
-        let _ = unsafe { libcdio_sys::udf_dirent_free(self.entry.as_ptr()) };
     }
 }
 
