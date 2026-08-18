@@ -29,7 +29,6 @@ use file_mode::Mode;
 use libcdio_sys::udf_dirent_s;
 use thiserror::Error;
 use time::OffsetDateTime;
-use tracing::error;
 
 use crate::udf::Udf;
 
@@ -110,36 +109,42 @@ pub struct UdfEntry<'a> {
 
 impl UdfEntry<'_> {
     /// Return the modification time.
-    /// Returns `None` in case the value is invalid.
-    pub fn modify_time(&self) -> Option<OffsetDateTime> {
+    pub fn modify_time(&self) -> Result<OffsetDateTime, UdfInvalidEntryError> {
         // SAFETY: Returns -1 in case the value is invalid, checked immediately below
         let time = unsafe { libcdio_sys::udf_get_modification_time(self.entry.as_ptr()) };
         if time == -1 {
-            return None;
+            return Err(UdfInvalidEntryError::new(
+                self.filename().ok(),
+                "udf_get_modification_time() returned -1".into(),
+            ));
         }
 
-        OffsetDateTime::from_unix_timestamp(time).ok()
+        OffsetDateTime::from_unix_timestamp(time)
+            .map_err(|err| UdfInvalidEntryError::new(self.filename().ok(), err.into()))
     }
 
     /// Return the filename.
-    /// `None` is returned if the filename has non UTF-8 characters, or on an unexpected error.
-    pub fn filename(&self) -> Option<&str> {
+    pub fn filename(&self) -> Result<&str, UdfInvalidEntryError> {
         const CURRENT_DIR_FILENAME: &str = ".";
 
         // SAFETY: self.entry is non null, therefore this method should not return null
         let filename = unsafe { libcdio_sys::udf_get_filename(self.entry.as_ptr()) };
         if filename.is_null() {
-            error!("udf_get_filename() returned an unexpected NULL");
-            return None;
+            return Err(UdfInvalidEntryError::new(
+                Option::<&str>::None,
+                "udf_get_filename() returned NULL".into(),
+            ));
         }
         let filename = unsafe { CStr::from_ptr(filename) };
         // filename returns an empty string after opening the root directory.
         // this probably represents "."
         if filename.is_empty() {
-            return Some(CURRENT_DIR_FILENAME);
+            return Ok(CURRENT_DIR_FILENAME);
         }
 
-        filename.to_str().ok()
+        filename
+            .to_str()
+            .map_err(|err| UdfInvalidEntryError::new(Option::<&str>::None, err.into()))
     }
 
     /// Return the next entry, or `None` on reaching end of file or on error.
@@ -212,6 +217,31 @@ impl Drop for UdfEntry<'_> {
     fn drop(&mut self) {
         // SAFETY: Infallible function
         let _ = unsafe { libcdio_sys::udf_dirent_free(self.entry.as_ptr()) };
+    }
+}
+
+/// UDF entry has invalid data
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct UdfInvalidEntryError(Box<InvalidEntryErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("found invalid data in UDF entry `{}`", name.as_deref().unwrap_or_default())]
+struct InvalidEntryErrRepr {
+    name: Option<String>,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl UdfInvalidEntryError {
+    /// Returns file name of the entry with invalid data.
+    pub fn name(&self) -> Option<&str> {
+        self.0.name.as_deref()
+    }
+    fn new(name: Option<impl Into<String>>, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(InvalidEntryErrRepr {
+            name: name.map(Into::into),
+            source,
+        }))
     }
 }
 
