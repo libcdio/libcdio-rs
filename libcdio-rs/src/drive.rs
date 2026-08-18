@@ -26,7 +26,6 @@ use std::{
 };
 
 use bitflags::bitflags;
-use displaydoc::Display;
 use libcdio_sys::cdio_hwinfo_t;
 use thiserror::Error;
 
@@ -38,8 +37,7 @@ pub struct Drive {
 }
 
 impl Drive {
-    /// Get a list of connected drives.
-    /// The values could be used with [`Self::with_drive()`].
+    /// Returns a list of connected drives.
     pub fn drives() -> Vec<PathBuf> {
         let drive_list =
             unsafe { libcdio_sys::cdio_get_devices(libcdio_sys::driver_id_t_DRIVER_DEVICE) };
@@ -49,19 +47,20 @@ impl Drive {
 
         let mut drives = Vec::new();
         let mut ptr = drive_list;
-        // SAFETY: The device list is NULL terminated, therefore safe to
-        // dereference till NULL is reached
-        while let drive = unsafe { *ptr }
+
+        // SAFETY: Null checked
+        while !ptr.is_null()
+            && let drive = unsafe { *ptr }
             && !drive.is_null()
         {
-            // SAFETY: null check performed; the value represents a path, thus an os string
+            // SAFETY: `drive` represents a system path, making it a valid `OsString`
             drives.push(PathBuf::from(unsafe {
                 OsString::from_encoded_bytes_unchecked(CStr::from_ptr(drive).to_bytes().to_vec())
             }));
             ptr = unsafe { ptr.offset(1) };
         }
 
-        // SAFETY: drive_list has been cloned above, thus safe to free
+        // SAFETY: drive_list has been copied into drives
         unsafe {
             libcdio_sys::cdio_free_device_list(drive_list);
         }
@@ -69,10 +68,7 @@ impl Drive {
         drives
     }
 
-    /// Use a default connected drive.
-    ///
-    /// # Errors
-    /// If there are no drives connected, or the drive could not be opened.
+    /// Opens a default connected drive.
     pub fn new() -> Result<Self, DriveNotFoundError> {
         Cdio::with_device(None)
             .ok_or(DriveNotFoundError)
@@ -93,9 +89,6 @@ impl Drive {
     }
 
     /// Returns hardware information of the drive.
-    ///
-    /// # Errors
-    /// If an underlying operation errored, or if the drive is unavailable.
     pub fn hardware_info(&self) -> Result<HardwareInfo, DriveOperationError> {
         let mut hwinfo: MaybeUninit<cdio_hwinfo_t> = MaybeUninit::uninit();
         let ret = unsafe { libcdio_sys::cdio_get_hwinfo(self.cdio.as_ptr(), hwinfo.as_mut_ptr()) };
@@ -120,10 +113,7 @@ impl Drive {
         }
     }
 
-    /// Get the drive capabilities.
-    ///
-    /// # Errors
-    /// If the operation errored, or the drive is not available.
+    /// Returns drive capabilities.
     pub fn capabilities(&self) -> Result<DriveCapabilities, DriveOperationError> {
         let mut read = 0;
         let mut write = 0;
@@ -143,9 +133,9 @@ impl Drive {
     }
 }
 
-/// could not find any drives
 #[non_exhaustive]
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Error)]
+#[error("could not find any drives")]
 pub struct DriveNotFoundError;
 
 #[derive(Debug, Error)]
@@ -174,12 +164,12 @@ impl DriveOpenError {
     }
 }
 
-/// could not perform operation on the drive
 #[non_exhaustive]
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Error)]
+#[error("could not perform operation on the drive")]
 pub struct DriveOperationError;
 
-/// Hardware information returned by a cdio driver.
+/// Hardware identifiers such as model, vendor and revision.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HardwareInfo {
     pub model: String,
@@ -187,7 +177,7 @@ pub struct HardwareInfo {
     pub revision: String,
 }
 
-/// Drive capabilities
+/// Drive capabilities.
 #[derive(Clone, Copy, Debug)]
 pub struct DriveCapabilities {
     pub read: ReadCapabilities,
@@ -196,6 +186,7 @@ pub struct DriveCapabilities {
 }
 // the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
+    /// Miscellaneous capabilities of the drive.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct MiscCapabilities: u32 {
         /// Can close tray
@@ -218,7 +209,7 @@ bitflags! {
 }
 // the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
-    /// Read capabilities of the drive
+    /// Read capabilities of the drive.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ReadCapabilities: u32 {
         /// Can play audio
@@ -257,7 +248,7 @@ bitflags! {
 }
 // the C enum discriminants are explicit, positive and fit a u32, making these casts safe
 bitflags! {
-    /// Write capabilities of the drive
+    /// Write capabilities of the drive.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct WriteCapabilities: u32 {
         /// Can write CD-R
