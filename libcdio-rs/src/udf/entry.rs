@@ -18,6 +18,7 @@
 //! UDF file/directory entry.
 
 use std::{
+    error::Error,
     ffi::{CStr, CString},
     io,
     marker::PhantomData,
@@ -26,38 +27,71 @@ use std::{
 
 use file_mode::Mode;
 use libcdio_sys::udf_dirent_s;
+use thiserror::Error;
 use time::OffsetDateTime;
+use tracing::error;
 
 use crate::udf::Udf;
 
 impl Udf {
-    /// Return the root entry of the filesystem.
-    /// `None` is returned on error.
-    pub fn root(&self) -> Option<UdfEntry<'_>> {
+    /// Return the root entry of the UDF filesystem.
+    pub fn root(&self) -> Result<UdfEntry<'_>, UdfGetEntryError> {
         // SAFETY: The returned value will be owned by UdfEntry
         let entry = unsafe { libcdio_sys::udf_get_root(self.udf.as_ptr(), true, 0) };
 
-        Some(UdfEntry::new(NonNull::new(entry)?))
+        NonNull::new(entry)
+            .map(UdfEntry::new)
+            .ok_or_else(|| UdfGetEntryError::new("/", "udf_get_root() returned NULL".into()))
     }
 
-    /// Return the root entry of the filesystem, from the given partition.
-    /// `None` is returned on error.
-    pub fn root_from_partition(&self, partition: u16) -> Option<UdfEntry<'_>> {
+    /// Return the root entry of the UDF filesystem, in the given partition.
+    pub fn root_from_partition(&self, partition: u16) -> Result<UdfEntry<'_>, UdfGetEntryError> {
         let entry = unsafe { libcdio_sys::udf_get_root(self.udf.as_ptr(), false, partition) };
 
-        Some(UdfEntry::new(NonNull::new(entry)?))
+        NonNull::new(entry)
+            .map(UdfEntry::new)
+            .ok_or_else(|| UdfGetEntryError::new("/", "udf_get_root() returned NULL".into()))
     }
 
-    /// Return entry for `path`.
+    /// Return UDF entry at given internal path.
     ///
     /// Only '/' may be used for path separators.
-    /// `None` is returned on error.
-    pub fn entry(&self, path: &str) -> Option<UdfEntry<'_>> {
+    pub fn entry(&self, path: &str) -> Result<UdfEntry<'_>, UdfGetEntryError> {
         let root = self.root()?;
-        let path = CString::new(path).ok()?;
+        let path = CString::new(path).map_err(|err| UdfGetEntryError::new(path, err.into()))?;
         let entry = unsafe { libcdio_sys::udf_fopen(root.entry.as_ptr(), path.as_ptr()) };
 
-        Some(UdfEntry::new(NonNull::new(entry)?))
+        NonNull::new(entry).map(UdfEntry::new).ok_or_else(|| {
+            UdfGetEntryError::new(
+                path.into_string()
+                    .expect("path was originally a valid string"),
+                "udf_fopen() returned NULL".into(),
+            )
+        })
+    }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct UdfGetEntryError(Box<GetEntryErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("could not get UDF entry at `{path}`")]
+struct GetEntryErrRepr {
+    path: String,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl UdfGetEntryError {
+    /// The path of the UDF entry that caused the error.
+    pub fn path(&self) -> &str {
+        &self.0.path
+    }
+    fn new(path: impl Into<String>, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(GetEntryErrRepr {
+            path: path.into(),
+            source,
+        }))
     }
 }
 
@@ -95,7 +129,7 @@ impl UdfEntry<'_> {
         // SAFETY: self.entry is non null, therefore this method should not return null
         let filename = unsafe { libcdio_sys::udf_get_filename(self.entry.as_ptr()) };
         if filename.is_null() {
-            tracing::error!("udf_get_filename() returned an unexpected NULL");
+            error!("udf_get_filename() returned an unexpected NULL");
             return None;
         }
         let filename = unsafe { CStr::from_ptr(filename) };
