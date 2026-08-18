@@ -35,7 +35,7 @@ impl Iso {
     ///
     /// Only '/' may be used for path separators.
     /// Returns `None` on error.
-    pub fn read_dir(&self, path: &str) -> Result<Vec<IsoEntry<'_>>, IsoGetEntryError> {
+    pub fn read_dir(&self, path: String) -> Result<Vec<IsoEntry<'_>>, IsoGetEntryError> {
         let path = CString::new(path).map_err(|err| {
             IsoGetEntryError::new(
                 String::from_utf8(err.clone().into_vec()).expect("path was a valid string"),
@@ -301,14 +301,14 @@ mod tests {
     #[test]
     fn read_dir() {
         let iso = Iso::new(test_joliet_file()).unwrap();
-        let entries = iso.read_dir("/").unwrap();
+        let entries = iso.read_dir("/".to_owned()).unwrap();
         assert_eq!(entries.len(), 3);
     }
 
     #[test]
     fn filename() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entries = iso.read_dir("/").unwrap();
+        let entries = iso.read_dir("/".to_owned()).unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename_raw().unwrap()).collect();
         assert_eq!(
             &names,
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn filename_translated() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entries = iso.read_dir("/").unwrap();
+        let entries = iso.read_dir("/".to_owned()).unwrap();
         let names: Vec<_> = entries.iter().map(|e| e.filename().unwrap()).collect();
         assert_eq!(
             &names,
