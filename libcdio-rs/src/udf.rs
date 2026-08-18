@@ -33,15 +33,16 @@ use libcdio_sys::udf_t;
 
 use crate::logging;
 
-/// UDF filesystem.
+/// A UDF filesystem instance.
 pub struct Udf {
     pub(crate) udf: NonNull<udf_t>,
 }
 
 impl Udf {
+    /// The number of bytes in a UDF block.
     pub const BLOCK_SIZE: usize = 2048;
 
-    /// Opens a UDF filesystem at given path.
+    /// Opens a UDF filesystem at `path`.
     pub fn new(path: PathBuf) -> Result<Self, UdfOpenError> {
         logging::init_logger();
 

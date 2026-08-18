@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! UDF file/directory entry.
+//! Routines related to UDF filesystem entries.
 
 use std::{
     error::Error,
@@ -26,16 +26,16 @@ use std::{
 };
 
 use file_mode::Mode;
-use libcdio_sys::udf_dirent_s;
+use libcdio_sys::{udf_dirent_s, udf_t};
 use thiserror::Error;
 use time::OffsetDateTime;
 
 use crate::udf::Udf;
 
 impl Udf {
-    /// Return the root entry of the UDF filesystem.
+    /// Returns the root entry of the UDF filesystem.
     pub fn root(&self) -> Result<UdfEntry<'_>, UdfGetEntryError> {
-        // SAFETY: The returned value will be owned by UdfEntry
+        // SAFETY: UdfEntry will own the returned value.
         let entry = unsafe { libcdio_sys::udf_get_root(self.udf.as_ptr(), true, 0) };
 
         NonNull::new(entry)
@@ -43,8 +43,9 @@ impl Udf {
             .ok_or_else(|| UdfGetEntryError::new("/", "udf_get_root() returned NULL".into()))
     }
 
-    /// Return the root entry of the UDF filesystem, in the given partition.
+    /// Returns the root entry of the UDF filesystem, at the given partition.
     pub fn root_from_partition(&self, partition: u16) -> Result<UdfEntry<'_>, UdfGetEntryError> {
+        // SAFETY: UdfEntry will own the returned value.
         let entry = unsafe { libcdio_sys::udf_get_root(self.udf.as_ptr(), false, partition) };
 
         NonNull::new(entry)
@@ -52,12 +53,13 @@ impl Udf {
             .ok_or_else(|| UdfGetEntryError::new("/", "udf_get_root() returned NULL".into()))
     }
 
-    /// Return UDF entry at given internal path.
+    /// Returns UDF entry at `path`.
     ///
-    /// Only '/' may be used for path separators.
-    pub fn entry(&self, path: &str) -> Result<UdfEntry<'_>, UdfGetEntryError> {
+    /// Only Unix-style `/` may be used as a path separator.
+    pub fn entry(&self, path: String) -> Result<UdfEntry<'_>, UdfGetEntryError> {
         let root = self.root()?;
         let path = CString::new(path).map_err(|err| UdfGetEntryError::new(path, err.into()))?;
+        // SAFETY: UdfEntry will own the returned value.
         let entry = unsafe { libcdio_sys::udf_fopen(root.entry.as_ptr(), path.as_ptr()) };
 
         NonNull::new(entry).map(UdfEntry::new).ok_or_else(|| {
@@ -97,18 +99,14 @@ impl UdfGetEntryError {
 /// A UDF file/directory entry.
 pub struct UdfEntry<'a> {
     entry: NonNull<udf_dirent_s>,
-    /// The Group ID of the entry
     pub gid: u32,
-    /// The User ID of the entry
     pub uid: u32,
-    // udf_dirent_s internally holds references to udf_t
-    // thus it is valid for only as long as its parent
-    // udf_t is
-    _phantom: PhantomData<&'a udf_dirent_s>,
+    // udf_dirent_s has internal references to its parent udf_t
+    _parent: PhantomData<&'a udf_t>,
 }
 
 impl UdfEntry<'_> {
-    /// Return the modification time.
+    /// Returns the modification time.
     pub fn modify_time(&self) -> Result<OffsetDateTime, UdfInvalidEntryError> {
         // SAFETY: Returns -1 in case the value is invalid, checked immediately below
         let time = unsafe { libcdio_sys::udf_get_modification_time(self.entry.as_ptr()) };
@@ -123,7 +121,7 @@ impl UdfEntry<'_> {
             .map_err(|err| UdfInvalidEntryError::new(self.filename().ok(), err.into()))
     }
 
-    /// Return the filename.
+    /// Returns the file name.
     pub fn filename(&self) -> Result<&str, UdfInvalidEntryError> {
         const CURRENT_DIR_FILENAME: &str = ".";
 
@@ -147,37 +145,34 @@ impl UdfEntry<'_> {
             .map_err(|err| UdfInvalidEntryError::new(Option::<&str>::None, err.into()))
     }
 
-    /// Return the next entry, or `None` on reaching end of file or on error.
+    /// Returns the next entry.
     pub fn next(self) -> Option<Self> {
-        // SAFETY: This always frees the passed entry, therefore prevent self's destructor
-        // from running
+        // SAFETY: This function moves self. Use mem::forget to stop the destructor.
         let next_entry = unsafe { libcdio_sys::udf_readdir(self.entry.as_ptr()) };
         std::mem::forget(self);
 
         NonNull::new(next_entry).map(Self::new)
     }
 
-    /// Open `self` and return the first entry.
-    /// Returns `None` if `self` is not a directory, or on error.
-    // TODO: Add unit test, need a UDF file with directory that works with libcdio
+    /// Opens `self` and return the first entry.
     pub fn open_dir(&self) -> Option<Self> {
         let sub_entry = unsafe { libcdio_sys::udf_opendir(self.entry.as_ptr()) };
 
         Some(Self::new(NonNull::new(sub_entry)?))
     }
 
-    /// Is the entry a directory.
+    /// Checks if the entry is a directory.
     pub fn is_dir(&self) -> bool {
         unsafe { libcdio_sys::udf_is_dir(self.entry.as_ptr()) }
     }
 
-    /// Return the file length.
+    /// Returns the file length.
     pub fn file_length(&self) -> u64 {
         // SAFETY: entry is not null, making this function infallible
         unsafe { libcdio_sys::udf_get_file_length(self.entry.as_ptr()) }
     }
 
-    /// Return the POSIX file mode.
+    /// Returns the POSIX file mode.
     pub fn mode(&self) -> Mode {
         // `mode_t` is non-portable (16 or 32 bit)
         #[allow(clippy::useless_conversion)]
@@ -185,14 +180,13 @@ impl UdfEntry<'_> {
         Mode::new(mode, u32::MAX)
     }
 
-    /// Return the number of hard links of the entry.
+    /// Returns the number of hard links of the entry.
     pub fn link_count(&self) -> u16 {
         unsafe { libcdio_sys::udf_get_link_count(self.entry.as_ptr()) }
     }
 
-    /// Returns a type that implements [`io::Read`], to allow for reading the
-    /// file entry corresponding to an [`Iso9660Stat`]
-    /// Returns `None` on error.
+    /// Returns a type that implements [`io::Read`] to allow for reading the
+    /// file data of a UDF entry.
     pub fn reader(&self) -> UdfEntryReader<'_> {
         UdfEntryReader {
             bytes_read: 0,
@@ -208,14 +202,13 @@ impl UdfEntry<'_> {
             entry,
             gid: u32::from_le(gid),
             uid: u32::from_le(uid),
-            _phantom: PhantomData,
+            _parent: PhantomData,
         }
     }
 }
 
 impl Drop for UdfEntry<'_> {
     fn drop(&mut self) {
-        // SAFETY: Infallible function
         let _ = unsafe { libcdio_sys::udf_dirent_free(self.entry.as_ptr()) };
     }
 }
@@ -246,22 +239,16 @@ impl UdfInvalidEntryError {
 }
 
 /// A type that implements [`io::Read`], to allow for reading the
-/// file corresponding to a [`UdfEntry`]
+/// file data of a UDF entry.
 // This is NOT thread safe, as udf_dirent_s internally holds
-// the current position
+// its current file position with a non-atomic integer
 pub struct UdfEntryReader<'a> {
     bytes_read: usize,
     entry: &'a UdfEntry<'a>,
 }
 
 impl UdfEntryReader<'_> {
-    /// Sets the internal position value that's stored the FFI boundary.
-    // As of libcdio v2.3.0, the internal value i.e
-    // udf_dirent_s.p_udf->i_position is only used by its provided read and
-    // seek methods.
-    // Therefore, prevent state leakage between independent instances of
-    // Self in the corresponding rust methods by resetting the internal
-    // position to zero in the corresponding rust methods.
+    /// Sets the current file position of the entry.
     fn set_position(&mut self, block_num: usize) {
         // SAFETY: UdfEntryReader and UdfEntry are not marked
         // as thread safe
@@ -280,8 +267,16 @@ impl io::Read for UdfEntryReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let file_size = self.entry.file_length() as usize;
         let mut buf_read = 0;
-        // prevent state leakage. refer method doc for more.
+
+        // As of writing, udf_dirent_s stores the current file position
+        // at p_udf->i_position. This is used by libcdio's UDF read and UDF
+        // seek routines.
+        // This causes state leakage when more than one instance of
+        // UdfEntryReader are used from the same UdfEntry.
+        // Fix this by resetting the file position value to zero before
+        // actions that change it.
         self.set_position(0);
+
         while self.bytes_read < file_size && buf_read < buf.len() {
             let block_num = self.bytes_read / Udf::BLOCK_SIZE;
             self.set_position(block_num);
@@ -415,6 +410,16 @@ mod tests {
     }
 
     #[test]
+    fn open_dir() {
+        let udf = Udf::new(test_udf_file1()).unwrap();
+        let entry = udf.root().unwrap();
+        // /licenses
+        let entry = entry.next().unwrap().next().unwrap();
+        // /licenses/.
+        entry.open_dir().unwrap();
+    }
+
+    #[test]
     fn read() {
         let udf = Udf::new(test_udf_file1()).unwrap();
         let root = udf.root().unwrap();
@@ -437,6 +442,6 @@ mod tests {
     #[test]
     fn entry() {
         let udf = Udf::new(test_udf_file1()).unwrap();
-        udf.entry("/licenses/COPYING.LESSER").unwrap();
+        udf.entry("/licenses/COPYING.LESSER".to_owned()).unwrap();
     }
 }
