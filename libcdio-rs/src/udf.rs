@@ -20,8 +20,14 @@
 mod entry;
 
 pub use entry::UdfEntry;
+use thiserror::Error;
 
-use std::{ffi::CString, path::PathBuf, ptr::NonNull};
+use std::{
+    error::Error,
+    ffi::{CString, OsString},
+    path::PathBuf,
+    ptr::NonNull,
+};
 
 use libcdio_sys::udf_t;
 
@@ -35,23 +41,49 @@ pub struct Udf {
 impl Udf {
     pub const BLOCK_SIZE: usize = 2048;
 
-    /// Open a UDF file. `None` is returned on error.
-    pub fn new(path: PathBuf) -> Option<Self> {
+    /// Opens a UDF filesystem at given path.
+    pub fn new(path: PathBuf) -> Result<Self, UdfOpenError> {
         logging::init_logger();
 
-        let path = CString::new(path.into_os_string().as_encoded_bytes()).ok()?;
-        // SAFETY: The returned udf object is owned by Self and freed during drop
+        let path = CString::new(path.into_os_string().as_encoded_bytes())
+            .map_err(|err| UdfOpenError::new(err.clone().into_vec(), Some(err.into())))?;
         let udf = unsafe { libcdio_sys::udf_open(path.as_ptr()) };
 
-        Some(Self {
-            udf: NonNull::new(udf)?,
-        })
+        NonNull::new(udf)
+            .map(|udf| Self { udf })
+            .ok_or_else(|| UdfOpenError::new(path.into_bytes(), None))
     }
 }
 
 impl Drop for Udf {
     fn drop(&mut self) {
         let _ = unsafe { libcdio_sys::udf_close(self.udf.as_mut()) };
+    }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct UdfOpenError(Box<Repr>);
+
+#[derive(Debug, Error)]
+#[error("error opening UDF filesystem at `{:?}`", path)]
+struct Repr {
+    path: PathBuf,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl UdfOpenError {
+    /// The path used to open the UDF file.
+    pub fn path(self) -> PathBuf {
+        self.0.path
+    }
+
+    fn new(path_bytes: Vec<u8>, source: Option<Box<dyn Error + Send + Sync>>) -> Self {
+        Self(Box::new(Repr {
+            // SAFETY: path_bytes originate from a `PathBuf`
+            path: unsafe { OsString::from_encoded_bytes_unchecked(path_bytes) }.into(),
+            source,
+        }))
     }
 }
 
