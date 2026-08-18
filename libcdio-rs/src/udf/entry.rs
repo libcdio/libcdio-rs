@@ -58,7 +58,12 @@ impl Udf {
     /// Only Unix-style `/` may be used as a path separator.
     pub fn entry(&self, path: String) -> Result<UdfEntry<'_>, UdfGetEntryError> {
         let root = self.root()?;
-        let path = CString::new(path).map_err(|err| UdfGetEntryError::new(path, err.into()))?;
+        let path = CString::new(path).map_err(|err| {
+            UdfGetEntryError::new(
+                String::from_utf8(err.clone().into_vec()).expect("path was a valid string"),
+                err.into(),
+            )
+        })?;
         // SAFETY: UdfEntry will own the returned value.
         let entry = unsafe { libcdio_sys::udf_fopen(root.entry.as_ptr(), path.as_ptr()) };
 
