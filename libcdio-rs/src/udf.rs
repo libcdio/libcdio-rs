@@ -17,9 +17,10 @@
 
 //! UDF filesystem.
 
+pub use entry::*;
+
 mod entry;
 
-pub use entry::UdfEntry;
 use thiserror::Error;
 
 use std::{
