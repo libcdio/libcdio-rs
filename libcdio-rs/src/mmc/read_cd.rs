@@ -16,6 +16,7 @@
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
 //! Routines based on `READ CD`.
+// See MMC-6 2g, 6.19 READ CD Command
 
 use docsplay::Display;
 use thiserror::Error;
