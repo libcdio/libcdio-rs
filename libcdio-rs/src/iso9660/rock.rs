@@ -137,11 +137,11 @@ mod tests {
     #[test]
     fn rock_ridge() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         assert!(entry.rock_ridge().is_some());
 
         let iso = Iso::new(test_joliet_file()).unwrap();
-        let entry = iso.entry("/libcdio/COPYING").unwrap();
+        let entry = iso.entry("/libcdio/COPYING".to_string()).unwrap();
         assert!(entry.rock_ridge().is_none());
     }
 
@@ -149,19 +149,19 @@ mod tests {
     fn mode() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
 
-        let entry = iso.entry("/zero").unwrap();
+        let entry = iso.entry("/zero".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "cr--r--r--");
 
-        let entry = iso.entry("/fd0").unwrap();
+        let entry = iso.entry("/fd0".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "br--r--r--");
 
-        let entry = iso.entry("/Copy2").unwrap();
+        let entry = iso.entry("/Copy2".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "lr-xr-xr-x");
 
-        let entry = iso.entry("/copy").unwrap();
+        let entry = iso.entry("/copy".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "dr-xr-xr-x");
     }
@@ -170,15 +170,15 @@ mod tests {
     fn symlink_to() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
 
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert!(rock.symlink_to.is_none());
 
-        let entry = iso.entry("/Copy2").unwrap();
+        let entry = iso.entry("/Copy2".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.symlink_to.unwrap(), "COPYING");
 
-        let entry = iso.entry("/tmp/COPYING").unwrap();
+        let entry = iso.entry("/tmp/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.symlink_to.unwrap(), "../copying/COPYING");
     }
@@ -186,11 +186,11 @@ mod tests {
     #[test]
     fn hard_links() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.hard_links, 1);
 
-        let entry = iso.entry("/copy").unwrap();
+        let entry = iso.entry("/copy".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.hard_links, 2);
     }
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn user_id() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.user_id, 0);
     }
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn group_id() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.group_id, 0);
     }
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn time() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(
             rock.modify_time.unwrap(),

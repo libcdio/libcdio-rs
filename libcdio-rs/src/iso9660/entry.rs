@@ -65,7 +65,7 @@ impl Iso {
     }
 
     /// Returns ISO 9660 entry at internal `path`.
-    pub fn entry(&self, path: &str) -> Result<IsoEntry<'_>, IsoGetEntryError> {
+    pub fn entry(&self, path: String) -> Result<IsoEntry<'_>, IsoGetEntryError> {
         let path = CString::new(path).map_err(|err| {
             IsoGetEntryError::new(
                 String::from_utf8(err.clone().into_vec()).expect("path was a valid string"),
@@ -330,38 +330,38 @@ mod tests {
     #[test]
     fn entry() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/copy").unwrap();
+        let entry = iso.entry("/copy".to_string()).unwrap();
         assert_eq!(entry.filename().unwrap(), "copy");
     }
 
     #[test]
     fn total_size() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         assert_eq!(entry.total_size(), 17992);
     }
 
     #[test]
     fn lsn() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         assert_eq!(entry.lsn(), 27);
     }
 
     #[test]
     fn is_dir() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let file = iso.entry("/COPYING").unwrap();
+        let file = iso.entry("/COPYING".to_string()).unwrap();
         assert!(!file.is_dir());
 
-        let dir = iso.entry("/copy").unwrap();
+        let dir = iso.entry("/copy".to_string()).unwrap();
         assert!(dir.is_dir());
     }
 
     #[test]
     fn timestamp() {
         let iso = Iso::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         assert_eq!(
             entry.timestamp().unwrap(),
             datetime!(2005-03-05 20:55:51.0 +05:30:00),
@@ -371,7 +371,7 @@ mod tests {
     #[test]
     fn read() {
         let iso = Iso::new(PathBuf::from("../test-data/xa.iso")).unwrap();
-        let entry = iso.entry("copying").unwrap();
+        let entry = iso.entry("copying".to_string()).unwrap();
         let gpl = std::fs::read_to_string("../COPYING").unwrap();
         let mut reader = entry.reader();
 
