@@ -34,6 +34,7 @@ pub(crate) fn convert_tm_local(
     Ok(OffsetDateTime::new_in_offset(
         date,
         time,
-        UtcOffset::current_local_offset().expect("could not obtain the system offset"),
+        UtcOffset::local_offset_at(OffsetDateTime::new_utc(date, time))
+            .expect("could not obtain the system offset"),
     ))
 }
