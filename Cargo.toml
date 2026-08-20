@@ -11,7 +11,7 @@ readme = "README.md"
 repository = "https://github.com/libcdio/cdio-rust"
 
 [workspace.dependencies]
-libcdio-sys = { version = "2.0.0", default-features = false }
+libcdio-sys = { git = "https://github.com/libcdio/libcdio-sys.git", rev = "a232be6", default-features = false }
 test-log = { version = "0.2.20", features = ["trace"] }
 time = "0.3.47"
 tracing = { version = "0.1.44", default-features = false, features = ["log", "std"] }
