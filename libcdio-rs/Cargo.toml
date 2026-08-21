@@ -12,6 +12,7 @@ repository.workspace = true
 
 [features]
 iso9660 = ["libcdio-sys/iso9660", "dep:file-mode", "dep:time"]
+mmc = ["dep:winnow"]
 udf = ["libcdio-sys/udf", "dep:file-mode", "dep:time"]
 
 [dependencies]
@@ -24,7 +25,7 @@ num_enum = { version = "0.7.6", features = ["complex-expressions"] }
 thiserror = "2.0.18"
 time = { workspace = true, features = ["local-offset"], optional = true }
 tracing.workspace = true
-winnow = { version = "1.0.3", features = ["binary", "parser", "std"], default-features = false }
+winnow = { version = "1.0.3", features = ["binary", "parser", "std"], default-features = false, optional = true }
 
 [dev-dependencies]
 test-log.workspace = true

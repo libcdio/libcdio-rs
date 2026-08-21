@@ -24,13 +24,15 @@ pub mod drive;
 pub mod iso9660;
 
 mod logging;
+
+#[cfg(feature = "mmc")]
 pub mod mmc;
 
 #[cfg(feature = "udf")]
 pub mod udf;
 
 #[doc(inline)]
-pub use crate::{drive::Drive, mmc::Mmc};
+pub use crate::drive::Drive;
 
 #[cfg(feature = "iso9660")]
 #[doc(inline)]
@@ -39,6 +41,10 @@ pub use crate::iso9660::Iso;
 #[cfg(feature = "udf")]
 #[doc(inline)]
 pub use crate::udf::Udf;
+
+#[cfg(feature = "mmc")]
+#[doc(inline)]
+pub use mmc::Mmc;
 
 #[cfg(any(feature = "iso9660", feature = "udf"))]
 pub use {file_mode, time};
