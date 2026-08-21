@@ -17,7 +17,11 @@
 
 mod cli;
 
-use std::{collections::VecDeque, io, path::Path};
+use std::{
+    collections::VecDeque,
+    io,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
@@ -75,7 +79,7 @@ fn main() -> Result<()> {
     };
 
     if cli.udf {
-        print_udf_contents(&file, &mut output)?;
+        print_udf_contents(file, &mut output)?;
     }
 
     Ok(())
@@ -247,13 +251,10 @@ fn xa_file_mode_str(attr: XaFileAttributes) -> String {
 }
 
 /// Outputs the file contents of the UDF image in an ls-like listing format.
-fn print_udf_contents(path: &Path, out: &mut dyn io::Write) -> Result<()> {
-    let udf =
-        Udf::new(path).with_context(|| format!("could not open udf image: {}", path.display()))?;
+fn print_udf_contents(path: PathBuf, out: &mut dyn io::Write) -> Result<()> {
+    let udf = Udf::new(path.clone())?;
 
-    let root = udf
-        .root()
-        .with_context(|| format!("could not find root in udf image: {}", path.display()))?;
+    let root = udf.root()?;
     let mut dirs = VecDeque::new();
     dirs.push_back((root, "/".to_owned()));
 
@@ -262,16 +263,13 @@ fn print_udf_contents(path: &Path, out: &mut dyn io::Write) -> Result<()> {
         let mut next_entry = dir.next();
 
         while let Some(entry) = next_entry {
-            let filename = entry
-                .filename()
-                .with_context(|| format!("could not get filename at: {}", path.display()))?;
+            let filename = entry.filename()?;
             let file_path = dir_path.clone() + filename + "/";
 
             let local = UtcOffset::current_local_offset()
                 .context("could not get current time offset from system")?;
             let modify_time = entry
-                .modify_time()
-                .with_context(|| format!("could not get timestamp: {}", file_path))?
+                .modify_time()?
                 .to_offset(local)
                 .format(DATE_FMT)
                 .with_context(|| format!("could not format timestamp: {}", file_path))?;

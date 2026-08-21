@@ -17,35 +17,43 @@
 
 //! UDF filesystem.
 
+pub use entry::*;
+
 mod entry;
 
-pub use entry::UdfEntry;
+use thiserror::Error;
 
-use std::{ffi::CString, path::Path, ptr::NonNull};
+use std::{
+    error::Error,
+    ffi::{CString, OsString},
+    path::PathBuf,
+    ptr::NonNull,
+};
 
 use libcdio_sys::udf_t;
 
 use crate::logging;
 
-/// UDF filesystem.
+/// A UDF filesystem instance.
 pub struct Udf {
     pub(crate) udf: NonNull<udf_t>,
 }
 
 impl Udf {
+    /// The number of bytes in a UDF block.
     pub const BLOCK_SIZE: usize = 2048;
 
-    /// Open a UDF file. `None` is returned on error.
-    pub fn new(path: &Path) -> Option<Self> {
+    /// Opens a UDF filesystem at `path`.
+    pub fn new(path: PathBuf) -> Result<Self, UdfOpenError> {
         logging::init_logger();
 
-        let path = CString::new(path.to_str()?).ok()?;
-        // SAFETY: The returned udf object is owned by Self and freed during drop
+        let path = CString::new(path.into_os_string().as_encoded_bytes())
+            .map_err(|err| UdfOpenError::new(err.clone().into_vec(), Some(err.into())))?;
         let udf = unsafe { libcdio_sys::udf_open(path.as_ptr()) };
 
-        Some(Self {
-            udf: NonNull::new(udf)?,
-        })
+        NonNull::new(udf)
+            .map(|udf| Self { udf })
+            .ok_or_else(|| UdfOpenError::new(path.into_bytes(), None))
     }
 }
 
@@ -55,12 +63,38 @@ impl Drop for Udf {
     }
 }
 
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct UdfOpenError(Box<Repr>);
+
+#[derive(Debug, Error)]
+#[error("error opening UDF filesystem at `{:?}`", path)]
+struct Repr {
+    path: PathBuf,
+    source: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl UdfOpenError {
+    /// The path used to open the UDF file.
+    pub fn path(self) -> PathBuf {
+        self.0.path
+    }
+
+    fn new(path_bytes: Vec<u8>, source: Option<Box<dyn Error + Send + Sync>>) -> Self {
+        Self(Box::new(Repr {
+            // SAFETY: path_bytes originate from a `PathBuf`
+            path: unsafe { OsString::from_encoded_bytes_unchecked(path_bytes) }.into(),
+            source,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    pub fn test_udf_file() -> &'static Path {
-        Path::new("../test-data/udf.iso")
+    pub fn test_udf_file() -> PathBuf {
+        PathBuf::from("../test-data/udf.iso")
     }
 
     #[test]
