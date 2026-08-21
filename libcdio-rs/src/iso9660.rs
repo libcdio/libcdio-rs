@@ -15,100 +15,94 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! ISO 9660 filesystem related routines.
+//! Routines related to the ISO 9660 filesystem.
 
-mod ds;
+pub use entry::*;
+pub use rock::*;
+pub use xa::*;
+
 mod entry;
 mod rock;
 mod util;
-pub mod xa;
-
-pub use entry::Iso9660Entry;
-pub use rock::RockRidge;
-#[doc(inline)]
-pub use xa::CdRomXa;
+mod xa;
 
 use std::{
-    ffi::{CStr, CString, c_char},
-    path::Path,
+    error::Error,
+    ffi::{CStr, CString, OsString, c_char},
+    path::{Path, PathBuf},
     ptr::{self, NonNull},
 };
 
-use bitflags::bitflags;
-use libcdio_sys::{
-    iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2,
-    iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3,
-    iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE, iso9660_t,
-};
+use libcdio_sys::iso9660_t;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use thiserror::Error;
+use tracing::error;
 
 use crate::logging::init_logger;
 
-/// The main ISO 9660 type
-pub struct Iso9660 {
+/// An ISO 9660 filesystem instance.
+pub struct Iso {
     pub(crate) ptr: NonNull<iso9660_t>,
 }
 
-/// A builder for [Iso9660].
-#[derive(Clone, Debug)]
-pub struct Iso9660Builder<'a> {
-    extensions: Iso9660Extensions,
-    path: &'a Path,
-}
-
-bitflags! {
-    /// ISO 9660 Extensions.
-    /// # Examples
-    /// ```rust, no_run
-    /// use libcdio_rs::iso9660::Iso9660Extensions;
-    /// // pick HighSierra and RockRidge
-    /// let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
-    /// // pick everything except RockRidge
-    /// let extensions = Iso9660Extensions::all() - Iso9660Extensions::RockRidge;
-    /// // pick nothing
-    /// let extensions = Iso9660Extensions::empty();
-    /// ```
-    #[derive(Clone, Copy, Debug)]
-    pub struct Iso9660Extensions: u8 {
-        const HighSierra = iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA as _;
-        const JolietLevel1 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1 as _;
-        const JolietLevel2 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2 as _;
-        const JolietLevel3 = iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3 as _;
-        const RockRidge = iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE as _;
-    }
-}
-
-/// Joliet level.
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
-pub enum JolietLevel {
-    One = 1,
-    Two,
-    Three,
-}
-
-impl Iso9660 {
+impl Iso {
     /// The number of bytes used by an ISO 9660 block.
     pub const BLOCK_SIZE: usize = 2048;
 
-    /// Open an ISO 9660 image for reading at given `path`, with all iso9660
-    /// extension flags enabled. Returns `None` on error.
-    pub fn new(path: &Path) -> Option<Self> {
-        let path = CString::new(path.to_str()?).ok()?;
+    /// Opens an ISO 9660 image at given `path`.
+    pub fn new(path: PathBuf) -> Result<Self, IsoOpenError> {
+        init_logger();
 
-        Self::open(&path, Iso9660Extensions::all())
-    }
+        let path = CString::new(path.into_os_string().as_encoded_bytes())
+            .inspect_err(|err| error!(%err, "invalid ISO 9660 path"))
+            .map_err(|err| IsoOpenError::new(err.clone().into_vec(), err.into()))?;
+        let iso9660_ptr = unsafe {
+            // enable all extensions
+            libcdio_sys::iso9660_open_ext(
+                path.as_ptr(),
+                (libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_HIGH_SIERRA
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL1
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL2
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_JOLIET_LEVEL3
+                    | libcdio_sys::iso_extension_enum_s_ISO_EXTENSION_ROCK_RIDGE)
+                    as _,
+            )
+        };
 
-    /// Returns a builder object. See [`Iso9660Builder`].
-    pub fn builder<'a>(path: &'a Path) -> Iso9660Builder<'a> {
-        Iso9660Builder::new(path)
+        NonNull::new(iso9660_ptr)
+            .map(|ptr| Self { ptr })
+            .ok_or_else(|| {
+                IsoOpenError::new(path.into_bytes(), "iso9660_open_ext() returned NULL".into())
+            })
     }
 
     /// Returns the Application Identifier.
     pub fn application(&self) -> Option<String> {
         self.get_identifier(libcdio_sys::iso9660_ifs_get_application_id)
+    }
+
+    /// Helper for the methods that return ISO 9660 identifiers.
+    fn get_identifier(
+        &self,
+        func: unsafe extern "C" fn(*mut iso9660_t, *mut *mut c_char) -> bool,
+    ) -> Option<String> {
+        let mut identifier_ptr = ptr::null_mut();
+
+        // SAFETY: identifier_ptr must be freed after use.
+        let success = unsafe { func(self.ptr.as_ptr(), &raw mut identifier_ptr) };
+        if !success || identifier_ptr.is_null() {
+            return None;
+        }
+
+        let identifier = unsafe { CStr::from_ptr(identifier_ptr) };
+        let identifier = identifier.to_string_lossy().to_string();
+
+        // SAFETY: identifier_ptr is already copied to a Rust string.
+        unsafe {
+            libcdio_sys::cdio_free(identifier_ptr.cast());
+        }
+
+        Some(identifier)
     }
 
     /// Returns the Data Preparer Identifier.
@@ -137,9 +131,6 @@ impl Iso9660 {
     }
 
     /// Returns the Joliet level.
-    /// # Note
-    /// [`Self`] must be constructed with the joliet extension enabled,
-    /// otherwise this will return `None` even if the file has Joliet.
     pub fn joliet_level(&self) -> Option<JolietLevel> {
         let joliet_level = unsafe { libcdio_sys::iso9660_ifs_get_joliet_level(self.ptr.as_ptr()) };
         if joliet_level == 0 {
@@ -150,110 +141,74 @@ impl Iso9660 {
 
         Some(joliet_level)
     }
-
-    fn open(path: &CStr, extensions: Iso9660Extensions) -> Option<Self> {
-        init_logger();
-
-        // SAFETY: path is duplicated by the method, so its safe to drop afterwards
-        let iso9660_ptr =
-            unsafe { libcdio_sys::iso9660_open_ext(path.as_ptr(), extensions.bits()) };
-
-        Some(Self {
-            ptr: NonNull::new(iso9660_ptr)?,
-        })
-    }
-
-    /// Helper for the methods that return iso9660 identifiers.
-    fn get_identifier(
-        &self,
-        func: unsafe extern "C" fn(*mut iso9660_t, *mut *mut c_char) -> bool,
-    ) -> Option<String> {
-        let mut identifier_ptr = ptr::null_mut();
-
-        // SAFETY: The method allocates a string and points the identifier_ptr to it.
-        // It must be freed after use.
-        let success = unsafe { func(self.ptr.as_ptr(), &raw mut identifier_ptr) };
-        if !success || identifier_ptr.is_null() {
-            return None;
-        }
-
-        let identifier = unsafe { CStr::from_ptr(identifier_ptr) };
-        let identifier = identifier.to_string_lossy().to_string();
-
-        // SAFETY: application_id has been duplicated into a Rust string
-        // above, thus safe to free
-        unsafe {
-            libcdio_sys::cdio_free(identifier_ptr.cast());
-        }
-
-        Some(identifier)
-    }
 }
 
-impl<'a> Iso9660Builder<'a> {
-    pub fn new(path: &'a Path) -> Self {
-        Self {
-            path,
-            extensions: Iso9660Extensions::empty(),
-        }
-    }
-
-    /// Set the extensions to be activated. This is set to be empty by default.
-    pub fn extensions(mut self, extensions: Iso9660Extensions) -> Self {
-        self.extensions = extensions;
-        self
-    }
-
-    /// Build the iso9660 type with the set options.
-    /// Returns `None` on error.
-    pub fn build(self) -> Option<Iso9660> {
-        let path = CString::new(self.path.to_str()?).ok()?;
-
-        Iso9660::open(&path, self.extensions)
-    }
-}
-
-impl Drop for Iso9660 {
+impl Drop for Iso {
     fn drop(&mut self) {
         let _ = unsafe { libcdio_sys::iso9660_close(self.ptr.as_ptr()) };
     }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct IsoOpenError(Box<OpenErrRepr>);
+
+#[derive(Debug, Error)]
+#[error("could not open ISO 9660 file at `{path}`")]
+struct OpenErrRepr {
+    path: PathBuf,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl IsoOpenError {
+    /// Returns the path of the ISO 9660 file.
+    pub fn path(&self) -> &Path {
+        &self.0.path
+    }
+
+    fn new(path_bytes: Vec<u8>, source: Box<dyn Error + Send + Sync>) -> Self {
+        Self(Box::new(OpenErrRepr {
+            // SAFETY: path_bytes originate from a PathBuf
+            path: unsafe { OsString::from_encoded_bytes_unchecked(path_bytes) }.into(),
+            source,
+        }))
+    }
+}
+
+/// Joliet level.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive, IntoPrimitive)]
+pub enum JolietLevel {
+    One = 1,
+    Two,
+    Three,
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
 
-    pub fn test_rockridge_file() -> &'static Path {
-        Path::new("../test-data/rock-ridge.iso")
+    pub fn test_rockridge_file() -> PathBuf {
+        PathBuf::from("../test-data/rock-ridge.iso")
     }
-    pub fn test_joliet_file() -> &'static Path {
-        Path::new("../test-data/joliet.iso")
+    pub fn test_joliet_file() -> PathBuf {
+        PathBuf::from("../test-data/joliet.iso")
     }
 
     #[test_log::test(test)]
     fn new() {
-        let iso = Iso9660::new(test_rockridge_file());
-        assert!(iso.is_some());
-    }
-
-    #[test]
-    fn builder() {
-        let extensions = Iso9660Extensions::HighSierra & Iso9660Extensions::RockRidge;
-        let iso = Iso9660::builder(test_rockridge_file())
-            .extensions(extensions)
-            .build();
-        assert!(iso.is_some());
+        Iso::new(test_rockridge_file()).unwrap();
     }
 
     #[test]
     fn joliet_level() {
-        let iso = Iso9660::new(test_joliet_file()).unwrap();
+        let iso = Iso::new(test_joliet_file()).unwrap();
         assert_eq!(iso.joliet_level().unwrap(), JolietLevel::Three);
     }
 
     #[test]
     fn application() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(
             &iso.application().unwrap(),
             "K3B THE CD KREATOR VERSION 0.11.20 (C) 2003 SEBASTIAN TRUEG AND THE K3B TEAM"
@@ -262,31 +217,31 @@ pub(crate) mod tests {
 
     #[test]
     fn data_preparer() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.data_preparer().unwrap(), "K3b - Version 0.11.20",);
     }
 
     #[test]
     fn publisher() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.publisher().unwrap(), "Rocky Bernstein");
     }
 
     #[test]
     fn system() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.system().unwrap(), "LINUX");
     }
 
     #[test]
     fn volume() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert_eq!(&iso.volume().unwrap(), "Rock Ridge Copy test");
     }
 
     #[test]
     fn volume_set() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert!(&iso.volume_set().is_none());
     }
 }

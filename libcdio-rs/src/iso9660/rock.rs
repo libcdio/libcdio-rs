@@ -15,64 +15,49 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! ISO 9660 Rock Ridge extensions.
+//! Routines related to ISO 9660 Rock Ridge extensions.
 
 use std::{ffi::CStr, mem::MaybeUninit};
 
 use file_mode::Mode;
 use libcdio_sys::{bool_3way_t_nope, bool_3way_t_yep, iso_rock_time_s};
+use thiserror::Error;
 use time::OffsetDateTime;
 
-use crate::iso9660::{Iso9660, entry::Iso9660Entry, util};
+use crate::iso9660::{Iso, entry::IsoEntry, util};
 
-/// ISO 9660 Rock Ridge extensions.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct RockRidge {
-    /// Create time
-    pub create_time: Option<OffsetDateTime>,
-    /// Group ID
-    pub group_id: u32,
-    /// Number of hard links
-    pub hard_links: u32,
-    /// Unix file mode
-    pub mode: Mode,
-    /// Modify time
-    pub modify_time: Option<OffsetDateTime>,
-    /// Symlink target
-    pub symlink_to: Option<String>,
-    /// User ID
-    pub user_id: u32,
-}
-
-impl Iso9660 {
-    /// Checks if any file has Rock Ridge extensions. Returns `None` on error.
+impl Iso {
+    /// Checks if any file has Rock Ridge extensions.
+    ///
     /// This can be time consuming, therefore `file_limit` can be provided to
     /// limit the number of files to scan.
-    pub fn have_rock_ridge(&self, file_limit: Option<u64>) -> Option<bool> {
+    pub fn have_rock_ridge(&self, file_limit: Option<u64>) -> Result<bool, RockRidgeSearchError> {
         let file_limit = file_limit.unwrap_or(u64::MAX);
         let result = unsafe { libcdio_sys::iso9660_have_rr(self.ptr.as_ptr(), file_limit) };
 
         #[allow(non_upper_case_globals)]
         match result {
-            bool_3way_t_yep => Some(true),
-            bool_3way_t_nope => Some(false),
-            _ => None,
+            bool_3way_t_yep => Ok(true),
+            bool_3way_t_nope => Ok(false),
+            _ => Err(RockRidgeSearchError),
         }
     }
 }
 
-impl Iso9660Entry<'_> {
-    /// Rock Ridge extensions.
-    /// `None` is returned if Rock ridge extensions are missing, or if it
-    /// could not be determined.
-    pub fn rock_ridge(&self) -> Option<RockRidge> {
+#[non_exhaustive]
+#[derive(Debug, Error)]
+#[error("error searching for rock ridge extensions: file limit reached")]
+pub struct RockRidgeSearchError;
+
+impl IsoEntry<'_> {
+    /// Returns the Rock Ridge attributes of the entry.
+    pub fn rock_ridge(&self) -> Option<RockRidgeAttributes> {
         let rock = unsafe { (*self.stat.as_ptr()).rr };
         if rock.b3_rock != bool_3way_t_yep {
             return None;
         }
 
-        Some(RockRidge {
+        Some(RockRidgeAttributes {
             create_time: convert_rock_timefield(rock.create),
             group_id: rock.st_gid,
             hard_links: rock.st_nlinks,
@@ -93,6 +78,19 @@ impl Iso9660Entry<'_> {
             user_id: rock.st_uid,
         })
     }
+}
+
+/// ISO 9660 Rock Ridge extensions.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct RockRidgeAttributes {
+    pub create_time: Option<OffsetDateTime>,
+    pub group_id: u32,
+    pub hard_links: u32,
+    pub mode: Mode,
+    pub modify_time: Option<OffsetDateTime>,
+    pub symlink_to: Option<String>,
+    pub user_id: u32,
 }
 
 fn convert_rock_timefield(field: iso_rock_time_s) -> Option<OffsetDateTime> {
@@ -124,91 +122,91 @@ mod tests {
 
     #[test]
     fn have_rock_ridge() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
         assert!(iso.have_rock_ridge(None).unwrap());
     }
 
     #[test]
     fn rock_ridge() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         assert!(entry.rock_ridge().is_some());
 
-        let iso = Iso9660::new(test_joliet_file()).unwrap();
-        let entry = iso.entry("/libcdio/COPYING").unwrap();
+        let iso = Iso::new(test_joliet_file()).unwrap();
+        let entry = iso.entry("/libcdio/COPYING".to_string()).unwrap();
         assert!(entry.rock_ridge().is_none());
     }
 
     #[test]
     fn mode() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
 
-        let entry = iso.entry("/zero").unwrap();
+        let entry = iso.entry("/zero".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "cr--r--r--");
 
-        let entry = iso.entry("/fd0").unwrap();
+        let entry = iso.entry("/fd0".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "br--r--r--");
 
-        let entry = iso.entry("/Copy2").unwrap();
+        let entry = iso.entry("/Copy2".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "lr-xr-xr-x");
 
-        let entry = iso.entry("/copy").unwrap();
+        let entry = iso.entry("/copy".to_string()).unwrap();
         let mode = entry.rock_ridge().unwrap().mode;
         assert_eq!(&mode.to_string(), "dr-xr-xr-x");
     }
 
     #[test]
     fn symlink_to() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
 
-        let entry = iso.entry("/COPYING").unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert!(rock.symlink_to.is_none());
 
-        let entry = iso.entry("/Copy2").unwrap();
+        let entry = iso.entry("/Copy2".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.symlink_to.unwrap(), "COPYING");
 
-        let entry = iso.entry("/tmp/COPYING").unwrap();
+        let entry = iso.entry("/tmp/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.symlink_to.unwrap(), "../copying/COPYING");
     }
 
     #[test]
     fn hard_links() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.hard_links, 1);
 
-        let entry = iso.entry("/copy").unwrap();
+        let entry = iso.entry("/copy".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.hard_links, 2);
     }
 
     #[test]
     fn user_id() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.user_id, 0);
     }
 
     #[test]
     fn group_id() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(rock.group_id, 0);
     }
 
     #[test]
     fn time() {
-        let iso = Iso9660::new(test_rockridge_file()).unwrap();
-        let entry = iso.entry("/COPYING").unwrap();
+        let iso = Iso::new(test_rockridge_file()).unwrap();
+        let entry = iso.entry("/COPYING".to_string()).unwrap();
         let rock = entry.rock_ridge().unwrap();
         assert_eq!(
             rock.modify_time.unwrap(),

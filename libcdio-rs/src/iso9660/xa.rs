@@ -15,46 +15,15 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
-//! CD-ROM XA (eXtended Architecture)
+//! Routines related to CD-ROM XA (eXtended Architecture).
 
 use bitflags::bitflags;
 
-use crate::iso9660::entry::Iso9660Entry;
+use crate::iso9660::entry::IsoEntry;
 
-/// CD-ROM XA (eXtended Architecture) attributes
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-pub struct CdRomXa {
-    pub file_attr: XaFileAttributes,
-    pub file_num: u8,
-    pub group_id: u16,
-    pub user_id: u16,
-    total_size: u64,
-}
-
-bitflags! {
-    /// XA File Attributes.
-    /// For more information: https://psx-spx.consoledev.net/cdromformat/#cdrom-iso-file-and-directory-descriptors
-    #[derive(Clone, Copy, Debug)]
-    pub struct XaFileAttributes: u16 {
-        const OwnerRead = 1 << 0;
-        const OwnerExecute = 1 << 2;
-        const GroupRead = 1 << 4;
-        const GroupExecute = 1 << 6;
-        const WorldRead = 1 << 8;
-        const WorldExecute = 1 << 10;
-        const Mode2 = 1 << 11;
-        const Mode2Form2 = 1 << 12;
-        const Interleaved = 1 << 13;
-        const Cdda = 1 << 14;
-        const Directory = 1 << 15;
-    }
-}
-
-impl Iso9660Entry<'_> {
-    /// Return CD-ROM XA (eXtended Architecture) attributes.
-    /// `None` is returned if the attributes are not present.
-    pub fn xa(&self) -> Option<CdRomXa> {
+impl IsoEntry<'_> {
+    /// Returns CD-ROM XA (eXtended Architecture) attributes of the entry.
+    pub fn xa(&self) -> Option<XaAttributes> {
         let have_xa = unsafe { (*self.stat.as_ptr()).b_xa };
         if !have_xa {
             return None;
@@ -63,7 +32,7 @@ impl Iso9660Entry<'_> {
         // SAFETY: The above check confirms that xa are present.
         let xa = unsafe { (*self.stat.as_ptr()).xa };
 
-        Some(CdRomXa {
+        Some(XaAttributes {
             file_attr: XaFileAttributes::from_bits_retain(u16::from_be(xa.attributes)),
             file_num: u8::from_be(xa.filenum),
             group_id: u16::from_be(xa.group_id),
@@ -73,8 +42,20 @@ impl Iso9660Entry<'_> {
     }
 }
 
-impl CdRomXa {
-    /// Return multi extent size.
+/// CD-ROM XA (eXtended Architecture) attributes.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct XaAttributes {
+    pub file_attr: XaFileAttributes,
+    pub file_num: u8,
+    pub group_id: u16,
+    pub user_id: u16,
+    total_size: u64,
+}
+
+impl XaAttributes {
+    /// Returns multi extent size.
+    ///
     /// Returns `None` if not using Mode2/Form2 encoding.
     // TODO: Add unit test
     pub const fn mode2form2_size(&self) -> Option<u64> {
@@ -91,18 +72,38 @@ impl CdRomXa {
     }
 }
 
+bitflags! {
+    /// XA File Attributes.
+    ///
+    /// See: https://psx-spx.consoledev.net/cdromformat/#cdrom-iso-file-and-directory-descriptors
+    #[derive(Clone, Copy, Debug)]
+    pub struct XaFileAttributes: u16 {
+        const OwnerRead = 1 << 0;
+        const OwnerExecute = 1 << 2;
+        const GroupRead = 1 << 4;
+        const GroupExecute = 1 << 6;
+        const WorldRead = 1 << 8;
+        const WorldExecute = 1 << 10;
+        const Mode2 = 1 << 11;
+        const Mode2Form2 = 1 << 12;
+        const Interleaved = 1 << 13;
+        const Cdda = 1 << 14;
+        const Directory = 1 << 15;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::PathBuf;
 
-    use crate::iso9660::Iso9660;
+    use crate::iso9660::Iso;
 
     use super::*;
 
     #[test]
     fn xa() {
-        let iso = Iso9660::new(Path::new("../test-data/xa.iso")).unwrap();
-        let entry = iso.entry("/copying").unwrap();
+        let iso = Iso::new(PathBuf::from("../test-data/xa.iso")).unwrap();
+        let entry = iso.entry("/copying".to_string()).unwrap();
         let xa = entry.xa().unwrap();
         assert_eq!(xa.file_num, 0);
         assert_eq!(xa.group_id, 3000);

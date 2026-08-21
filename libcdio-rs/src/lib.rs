@@ -34,7 +34,7 @@ pub use crate::{drive::Drive, mmc::Mmc};
 
 #[cfg(feature = "iso9660")]
 #[doc(inline)]
-pub use crate::iso9660::Iso9660;
+pub use crate::iso9660::Iso;
 
 #[cfg(feature = "udf")]
 #[doc(inline)]

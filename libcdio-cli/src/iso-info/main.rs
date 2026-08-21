@@ -25,10 +25,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use libcdio_rs::{
-    Iso9660, Udf,
-    iso9660::{Iso9660Extensions, xa::XaFileAttributes},
-};
+use libcdio_rs::{Iso, Udf, iso9660::XaFileAttributes};
 use time::{UtcOffset, format_description::BorrowedFormatItem, macros::format_description};
 use tracing_subscriber::EnvFilter;
 
@@ -51,42 +48,33 @@ fn main() -> Result<()> {
     let file = cli.file.positional.or(cli.file.option).expect(
         "the cli logic must ensure that the file argument is provided either as a positional or as an option",
     );
-    let mut extensions = Iso9660Extensions::all();
-    if cli.no_joliet {
-        extensions -= Iso9660Extensions::JolietLevel1;
-        extensions -= Iso9660Extensions::JolietLevel2;
-        extensions -= Iso9660Extensions::JolietLevel3;
-    }
-
-    if let Some(iso) = Iso9660::builder(&file).extensions(extensions).build() {
-        print_iso9660_metadata(&iso, &file, &mut output)
-            .context("io error while printing iso9660 metadata")?;
-
-        if cli.show_rock_ridge.is_some() {
-            let file_limit = cli.show_rock_ridge.filter(|file_limit| *file_limit != 0);
-            print_rock_ridge(&iso, file_limit, &mut output)
-                .context("io error while printing rock ridge status")?;
-        }
-
-        print_joliet_level(&iso, &mut output).context("io error while printing joliet level")?;
-
-        if cli.iso9660 {
-            print_iso9660_contents(&iso, &mut output, !cli.no_rock_ridge, !cli.no_xa)
-                .context("error printing iso9660 contents")?;
-        }
-    } else if !cli.udf {
-        bail!("error opening iso9660 image: {}", file.display());
-    };
 
     if cli.udf {
-        print_udf_contents(file, &mut output)?;
+        return print_udf_contents(file, &mut output);
+    }
+
+    let iso = Iso::new(file.clone())?;
+    print_iso9660_metadata(&iso, &file, &mut output)
+        .context("io error while printing iso9660 metadata")?;
+
+    if cli.show_rock_ridge.is_some() {
+        let file_limit = cli.show_rock_ridge.filter(|file_limit| *file_limit != 0);
+        print_rock_ridge(&iso, file_limit, &mut output)
+            .context("io error while printing rock ridge status")?;
+    }
+
+    print_joliet_level(&iso, &mut output).context("io error while printing joliet level")?;
+
+    if cli.iso9660 {
+        print_iso9660_contents(&iso, &mut output, !cli.no_rock_ridge, !cli.no_xa)
+            .context("error printing iso9660 contents")?;
     }
 
     Ok(())
 }
 
 fn print_iso9660_metadata(
-    iso: &Iso9660,
+    iso: &Iso,
     path: &Path,
     mut out: impl io::Write,
 ) -> Result<(), io::Error> {
@@ -107,21 +95,21 @@ fn print_iso9660_metadata(
 }
 
 fn print_rock_ridge(
-    iso: &Iso9660,
+    iso: &Iso,
     file_limit: Option<u64>,
     mut out: impl io::Write,
 ) -> Result<(), io::Error> {
     let status = match iso.have_rock_ridge(file_limit) {
-        Some(true) => "yes",
-        Some(false) => "no",
-        None => "possibly not",
+        Ok(true) => "yes",
+        Ok(false) => "no",
+        _ => "possibly not",
     };
     writeln!(out, "Rock Ridge  : {}", status)
 }
 
 /// Outputs the file contents of the ISO 9660 image in an ls-like listing format.
 fn print_iso9660_contents(
-    iso: &Iso9660,
+    iso: &Iso,
     mut out: impl io::Write,
     use_rock_ridge: bool,
     use_xa: bool,
@@ -140,20 +128,15 @@ fn print_iso9660_contents(
 
         writeln!(out, "{}:", dir_path)?;
 
-        for entry in iso
-            .read_dir(&dir_path)
-            .with_context(|| format!("could not read entry '{}' from iso", dir_path))?
-        {
+        for entry in iso.read_dir(dir_path.clone())? {
             let rock_ridge = use_rock_ridge.then_some(entry.rock_ridge()).flatten();
-            let translated_name = entry.filename();
             let entry_name = if rock_ridge.is_none() {
-                translated_name.as_deref()
+                entry.filename()?
             } else {
-                entry.filename_raw()
-            }
-            .with_context(|| format!("could not get file name of lsn: {}", entry.lsn()))?;
+                entry.filename_raw().map(String::from)?
+            };
 
-            let full_path = dir_path.clone() + entry_name + "/";
+            let full_path = dir_path.clone() + &entry_name + "/";
             if entry.is_dir() && entry_name != "." && entry_name != ".." {
                 dirs.push_back((full_path.clone(), depth + 1));
             }
@@ -194,9 +177,7 @@ fn print_iso9660_contents(
             {
                 mtime
             } else {
-                entry
-                    .timestamp()
-                    .with_context(|| format!("got invalid timestamp: {}", full_path))?
+                entry.timestamp()?
             };
 
             let local = UtcOffset::current_local_offset()
@@ -295,7 +276,7 @@ fn print_udf_contents(path: PathBuf, out: &mut dyn io::Write) -> Result<()> {
     Ok(())
 }
 
-fn print_joliet_level(iso: &Iso9660, mut out: impl io::Write) -> Result<(), io::Error> {
+fn print_joliet_level(iso: &Iso, mut out: impl io::Write) -> Result<(), io::Error> {
     let Some(joliet_level) = iso.joliet_level() else {
         return writeln!(out, "No Joliet extensions");
     };
