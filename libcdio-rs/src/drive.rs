@@ -88,8 +88,8 @@ impl Drive {
         Ok(Self { cdio })
     }
 
-    /// Returns hardware information of the drive.
-    pub fn hardware_info(&self) -> Result<HardwareInfo, DriveOperationError> {
+    /// Returns hardware identifiers of the drive such as Model, Vendor and Revision.
+    pub fn hardware_identifiers(&self) -> Result<HardwareIdentifiers, DriveOperationError> {
         let mut hwinfo: MaybeUninit<cdio_hwinfo_t> = MaybeUninit::uninit();
         let ret = unsafe { libcdio_sys::cdio_get_hwinfo(self.cdio.as_ptr(), hwinfo.as_mut_ptr()) };
         if !ret {
@@ -105,7 +105,7 @@ impl Drive {
             let vendor = CStr::from_ptr(hwinfo.psz_vendor.as_ptr());
             let revision = CStr::from_ptr(hwinfo.psz_revision.as_ptr());
 
-            Ok(HardwareInfo {
+            Ok(HardwareIdentifiers {
                 model: model.to_string_lossy().trim_end().to_string(),
                 vendor: vendor.to_string_lossy().trim_end().to_string(),
                 revision: revision.to_string_lossy().trim_end().to_string(),
@@ -171,7 +171,7 @@ pub struct DriveOperationError;
 
 /// Hardware identifiers such as model, vendor and revision.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HardwareInfo {
+pub struct HardwareIdentifiers {
     pub model: String,
     pub vendor: String,
     pub revision: String,
@@ -344,8 +344,8 @@ mod tests {
 
     #[test]
     #[ignore = "requires a disc drive"]
-    fn hardware_info() {
-        Drive::new().unwrap().hardware_info().unwrap();
+    fn hardware_identifiers() {
+        Drive::new().unwrap().hardware_identifiers().unwrap();
     }
 
     #[test]
