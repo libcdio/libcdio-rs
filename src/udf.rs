@@ -94,7 +94,7 @@ mod tests {
     use super::*;
 
     pub fn test_udf_file() -> PathBuf {
-        PathBuf::from("../test-data/udf.iso")
+        PathBuf::from("tests/data/udf.iso")
     }
 
     #[test]

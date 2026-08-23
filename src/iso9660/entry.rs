@@ -366,9 +366,9 @@ mod tests {
 
     #[test]
     fn read() {
-        let iso = Iso::new(PathBuf::from("../test-data/xa.iso")).unwrap();
+        let iso = Iso::new(PathBuf::from("tests/data/xa.iso")).unwrap();
         let entry = iso.entry("copying".to_string()).unwrap();
-        let gpl = std::fs::read_to_string("../COPYING").unwrap();
+        let gpl = std::fs::read_to_string("COPYING").unwrap();
         let mut reader = entry.reader();
 
         let mut result = String::new();

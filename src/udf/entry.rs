@@ -333,7 +333,7 @@ mod tests {
     use super::*;
 
     fn test_udf_file1() -> PathBuf {
-        PathBuf::from("../test-data/udf1.iso")
+        PathBuf::from("tests/data/udf1.iso")
     }
 
     #[test]
@@ -439,7 +439,7 @@ mod tests {
         let mut contents = String::new();
         let bytes_read = reader.read_to_string(&mut contents).unwrap();
 
-        let gpl = std::fs::read_to_string("../COPYING").unwrap();
+        let gpl = std::fs::read_to_string("COPYING").unwrap();
         assert_eq!(gpl.len(), bytes_read);
         assert_eq!(gpl, contents);
     }

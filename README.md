@@ -1,108 +1,32 @@
-# cdio-rust
+# libcdio-rs
+Safe wrapper and Rust port of [GNU libcdio][libcdio-site].
 
-Rust implementation and Utility programs of the Compact Disc Input and
-Control Core Library.
+For raw bindings, check out [libcdio-sys][libcdio-sys].
 
-This Cargo workspace contains two packages:
-- [libcdio-rs](./libcdio-rs): Safe Rust abstraction over libcdio C
-- [libcdio-cli](./libcdio-cli): Utility programs that use libcdio
+## Usage
+- Install [bindgen's requirements][bindgen-reqs].
+- Add with cargo:
+  ```shell
+  cargo add libcdio-rs --all-features
+  ```
 
-## Status
- * [x] cd-drive:      show CD-ROM drive characteristics
- * [ ] cd-info:       show information about a CD or CD-image
- * [ ] cd-paranoia:   an audio CD ripper
- * [ ] cd-read:       read information from a CD or CD-image
- * [ ] cdda-player:   a simple curses-based audio CD player
- * [x] iso-info:      show information about an ISO 9660 image
- * [x] iso-read:      read portions of an ISO 9660 image
- * [ ] mmc-tool:      issue low-level commands to a CD drive
+Feature flags are provided and guard the modules named after them.
+See the [documentation][docs].
 
-## Development
-### Build Requirements
-- [Cargo](https://rust-lang.org/learn/get-started/): The Rust build tool
-- [libclang](https://rust-lang.github.io/rust-bindgen/requirements.html):
-  Used by `libcdio-sys` for generating Rust bindings to libcdio
-- [libcdio](https://github.com/libcdio/libcdio): libcdio headers. Consult your package manager.
-  - Debian: `libcdio-headers`
-  - Fedora: `libcdio-devel`
-### Build
-```sh
-cargo build --release
-```
-Omit `--release` for debug builds.
-The build outputs should be in the `target` directory.
+## Design
+Currently, this library is partly a safe wrapper over libcdio and
+partly a port, with the goal of an eventual transition to a full
+rewrite.
 
-### Run the tests
-```sh
-cargo test
-```
+Progress so far:
+- Ported SCSI MMC functionality.
+- Implemented safe wrappers for a subset of ISO 9660 and UDF routines.
 
-To run ignored tests, which require some extra setup:
-```sh
-cargo test -- --include-ignored
-```
+## SCSI MMC references
+This library implements SCSI routines primarily based on
+[MMC-6 rev.2g][mmc6r2g] and [SPC-3 rev.23][spc3r23].
 
-To run tests which require manual intervention:
-```sh
-MANUAL_TESTS=1 cargo test -- [TEST_FILTER1 TEST_FILTER2...] --include-ignored
-```
-
-### Run the executables
-For example, to run the `iso-info` program:
-```sh
-cargo run --bin iso-info-rs -- ./test-data/rock-ridge.iso
-```
-
-### Use the provided Git Hooks
-These automatically perform lint and formatting checks:
-```sh
-git config core.hooksPath .githooks
-```
-
-To skip hooks, use `--no-verify`:
-```sh
-git commit --no-verify
-```
-
-### How to use a local build of libcdio
-Build libcdio with the `--without-versioned-libs` option.
-```sh
-cd libcdio
-autoreconf -f -i
-./configure --without-versioned-libs
-make
-```
-
-Set the following environment variables:
-```sh
-# Set this to the (absolute!) path of your libcdio build directory
-export LIBCDIO_ROOT="/home/skran/libcdio"
-
-export SYSTEM_DEPS_LIBCDIO_NO_PKG_CONFIG="yes"
-export SYSTEM_DEPS_LIBCDIO_SEARCH_NATIVE="$LIBCDIO_ROOT/lib/driver/.libs"
-export SYSTEM_DEPS_LIBCDIO_INCLUDE="$LIBCDIO_ROOT/include"
-export SYSTEM_DEPS_LIBCDIO_LIB="cdio"
-
-export SYSTEM_DEPS_LIBISO9660_NO_PKG_CONFIG="yes"
-export SYSTEM_DEPS_LIBISO9660_SEARCH_NATIVE="$LIBCDIO_ROOT/lib/iso9660/.libs"
-export SYSTEM_DEPS_LIBISO9660_INCLUDE="$LIBCDIO_ROOT/include"
-export SYSTEM_DEPS_LIBISO9660_LIB="iso9660"
-
-export SYSTEM_DEPS_LIBUDF_NO_PKG_CONFIG="yes"
-export SYSTEM_DEPS_LIBUDF_SEARCH_NATIVE="$LIBCDIO_ROOT/lib/udf/.libs"
-export SYSTEM_DEPS_LIBUDF_INCLUDE="$LIBCDIO_ROOT/include"
-export SYSTEM_DEPS_LIBUDF_LIB="udf"
-
-export BINDGEN_EXTRA_CLANG_ARGS="-I$LIBCDIO_ROOT/include"
-export LD_LIBRARY_PATH="$LIBCDIO_ROOT/lib/driver/.libs:$LIBCDIO_ROOT/lib/iso9660/.libs:$LIBCDIO_ROOT/lib/udf/.libs:$LD_LIBRARY_PATH"
-
-# For macOS
-export LD_LIBRARY_PATH="$LIBCDIO_ROOT/lib/driver/.libs:$LIBCDIO_ROOT/lib/iso9660/.libs:$LIBCDIO_ROOT/lib/udf/.libs:$DYLD_LIBRARY_PATH"
-```
-
-That's it. Cargo should now use your local copy of libcdio.
-
-# License
+## License
 Copyright (C) 2026 Shiva Kiran Koninty <shiva@skran.xyz>
 
 This program is free software: you can redistribute it and/or modify
@@ -117,3 +41,10 @@ General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+[libcdio-site]: https://libcdio.github.io
+[libcdio-sys]: https://crates.io/crates/libcdio-sys
+[bindgen-reqs]: https://rust-lang.github.io/rust-bindgen/requirements.html
+[docs]: https://docs.rs/libcdio-rs/latest/libcdio-rs
+[mmc6r2g]: https://www.13thmonkey.org/documentation/SCSI/mmc6r02g.pdf
+[spc3r23]: https://www.13thmonkey.org/documentation/SCSI/spc3r23.pdf
