@@ -8,6 +8,7 @@ repository = "https://github.com/libcdio/libcdio-rs"
 license = "GPL-3.0-or-later"
 keywords = ["cd", "scsi", "iso9660", "udf"]
 categories = ["api-bindings", "multimedia::audio", "filesystem", "hardware-support"]
+rust-version = "1.90.0"
 
 [features]
 iso9660 = ["libcdio-sys/iso9660", "dep:file-mode", "dep:time"]
