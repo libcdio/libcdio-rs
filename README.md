@@ -4,7 +4,7 @@ Safe wrapper and Rust port of [GNU libcdio][libcdio-site].
 For raw bindings, check out [libcdio-sys][libcdio-sys].
 
 ## Usage
-- Install [bindgen's requirements][bindgen-reqs].
+- Install [clang][bindgen-reqs].
 - Add with cargo:
   ```shell
   cargo add libcdio-rs --all-features
