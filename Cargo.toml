@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["libcdio-cli", "libcdio-rs"]
+members = ["libcdio-rs"]
 
 [workspace.package]
 authors = ["Shiva Kiran Koninty <shiva@skran.xyz>"]
