@@ -189,10 +189,10 @@ pub(crate) mod tests {
     use super::*;
 
     pub fn test_rockridge_file() -> PathBuf {
-        PathBuf::from("../test-data/rock-ridge.iso")
+        PathBuf::from("tests/data/rock-ridge.iso")
     }
     pub fn test_joliet_file() -> PathBuf {
-        PathBuf::from("../test-data/joliet.iso")
+        PathBuf::from("tests/data/joliet.iso")
     }
 
     #[test_log::test(test)]

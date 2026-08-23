@@ -1,4 +1,4 @@
-name: Cdio's Rust CI
+name: libcdio-rs CI
 
 on:
   push:
