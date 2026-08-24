@@ -42,7 +42,7 @@ git commit --no-verify
 ### Hardware tests
 The MMC tests are ignored by default as they require a CD/DVD drive.
 ```sh
-cargo test -- --include-ignored
+cargo test --all-features -- --include-ignored
 ```
 
 A few of the tests require manual intervention (such as media
@@ -51,7 +51,7 @@ These are located in [`tests/`](./tests).
 
 Example, to run the media removal test:
 ```sh
-MANUAL_TESTS=1 cargo test -- media_removal --include-ignored
+MANUAL_TESTS=1 cargo test --all-features -- media_removal --include-ignored
 ```
 
 ## See also
