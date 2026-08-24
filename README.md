@@ -11,7 +11,7 @@ For raw bindings, check out [libcdio-sys][libcdio-sys].
   ```
 
 Feature flags are provided and guard the modules named after them.
-See the [documentation][docs].
+See the [documentation][libcdio-rs-docs].
 
 ## Design
 Currently, this library is partly a safe wrapper over libcdio and
@@ -25,6 +25,38 @@ Progress so far:
 ## SCSI MMC references
 This library implements SCSI routines primarily based on
 [MMC-6 rev.2g][mmc6r2g] and [SPC-3 rev.23][spc3r23].
+
+## Development
+### Use the provided Git Hooks
+These are set to perform lint and formatting checks before every
+commit:
+```sh
+git config core.hooksPath .githooks
+```
+
+If you have to skip hooks for a draft commit, use `--no-verify`:
+```sh
+git commit --no-verify
+```
+
+### Hardware tests
+The MMC tests are ignored by default as they require a CD/DVD drive.
+```sh
+cargo test -- --include-ignored
+```
+
+A few of the tests require manual intervention (such as media
+removal) and require you to set `MANUAL_TESTS`.
+These are located in [`tests/`](./tests).
+
+Example, to run the media removal test:
+```sh
+MANUAL_TESTS=1 cargo test -- media_removal --include-ignored
+```
+
+## See also
+[libcdio-cli][libcdio-cli-cratesio] provides utility programs
+based on this crate's functionality.
 
 ## License
 Copyright (C) 2026 Shiva Kiran Koninty <shiva@skran.xyz>
@@ -42,9 +74,10 @@ General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+[bindgen-reqs]: https://rust-lang.github.io/rust-bindgen/requirements.html
+[libcdio-cli-cratesio]: https://crates.io/crates/libcdio-cli
+[libcdio-rs-docs]: https://docs.rs/libcdio-rs/latest/libcdio-rs
 [libcdio-site]: https://libcdio.github.io
 [libcdio-sys]: https://crates.io/crates/libcdio-sys
-[bindgen-reqs]: https://rust-lang.github.io/rust-bindgen/requirements.html
-[docs]: https://docs.rs/libcdio-rs/latest/libcdio-rs
 [mmc6r2g]: https://www.13thmonkey.org/documentation/SCSI/mmc6r02g.pdf
 [spc3r23]: https://www.13thmonkey.org/documentation/SCSI/spc3r23.pdf
