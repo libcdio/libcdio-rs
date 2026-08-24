@@ -15,6 +15,21 @@
 // You should have received a copy of the GNU General Public License
 // along with libcdio-rs. If not, see <https://www.gnu.org/licenses/>.
 
+//! # libcdio-rs
+//! Safe wrapper and Rust port of [GNU libcdio][libcdio-site].
+//!
+//! ## SCSI MMC references
+//! This library implements SCSI routines primarily based on
+//! [MMC-6 rev.2g][mmc6r2g] and [SPC-3 rev.23][spc3r23].
+//!
+//! ## Changelog
+//! See [CHANGELOG.md][changelog]
+//!
+//! [libcdio-site]: https://libcdio.github.io
+//! [mmc6r2g]: https://www.13thmonkey.org/documentation/SCSI/mmc6r02g.pdf
+//! [spc3r23]: https://www.13thmonkey.org/documentation/SCSI/spc3r23.pdf
+//! [changelog]: https://github.com/libcdio/libcdio-rs/tree/main/CHANGELOG.md
+
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod cdio;
