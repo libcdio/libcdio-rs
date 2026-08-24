@@ -48,7 +48,7 @@ impl Cdio {
 
         // SAFETY: This invokes cdio_init(), which mutates a static variable.
         // CDIO_LAST_DRIVER_LOCK is held to prevent data races.
-        let _lock = CDIO_LAST_DRIVER_LOCK.lock().unwrap();
+        let _lock = CDIO_INIT_LOCK.lock().unwrap();
         return unsafe { libcdio_sys::cdio_open_am(source, driver, access_mode) };
 
         /// Although prefixed "MMC", this does imply read-write for all
@@ -67,7 +67,7 @@ impl Deref for Cdio {
 
 impl Drop for Cdio {
     fn drop(&mut self) {
-        let _lock = CDIO_LAST_DRIVER_LOCK.lock().unwrap();
+        let _lock = CDIO_INIT_LOCK.lock().unwrap();
 
         // SAFETY: This method invokes modifies a static variable.
         // CDIO_LAST_DRIVER_LOCK is held to prevent data races.
@@ -75,7 +75,11 @@ impl Drop for Cdio {
     }
 }
 
-/// A lock guarding a private static named `CdIo_last_driver`. It must be held
-/// before invoking any libcdio methods that modify this value.
-/// As of libcdio v2.3.0, such methods are `cdio_init()` and `cdio_destroy()`.
-static CDIO_LAST_DRIVER_LOCK: Mutex<()> = Mutex::new(());
+/// A lock that must be held before any routine that initializes or
+/// destroys `CdIo_t`.
+/// It was found that the GNU/Linux driver initialization routine,
+/// is NOT thread safe as of libcdio v2.4.0.
+/// Apart from that, this also guards the use of a private static
+/// named `CdIo_last_driver`, used by `CdIo_t` during init
+/// and cleanup.
+pub(crate) static CDIO_INIT_LOCK: Mutex<()> = Mutex::new(());

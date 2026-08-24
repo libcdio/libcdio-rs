@@ -1,12 +1,14 @@
 //! Tests that would remove the drive media
-use libcdio_rs::{
-    Mmc,
-    mmc::{MmcCloseTrayError, MmcError, MmcSenseData, MmcStartStopError, SenseKey},
-};
 
+#[cfg(feature = "mmc")]
 #[test]
 #[ignore = "requires a drive with mmc"]
 fn media_removal() {
+    use libcdio_rs::{
+        Mmc,
+        mmc::{MmcCloseTrayError, MmcError, MmcSenseData, MmcStartStopError, SenseKey},
+    };
+
     if std::env::var("MANUAL_TESTS").is_err() {
         return;
     }
