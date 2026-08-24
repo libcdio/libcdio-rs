@@ -29,7 +29,10 @@ use bitflags::bitflags;
 use libcdio_sys::cdio_hwinfo_t;
 use thiserror::Error;
 
-use crate::cdio::Cdio;
+use crate::{
+    cdio::{CDIO_INIT_LOCK, Cdio},
+    logging,
+};
 
 /// An interface to a disc drive.
 pub struct Drive {
@@ -39,6 +42,12 @@ pub struct Drive {
 impl Drive {
     /// Returns a list of connected drives.
     pub fn drives() -> Vec<PathBuf> {
+        logging::init_logger();
+
+        // SAFETY: This method internally initializes an instance of CdIo_t,
+        // which is not thread safe. Hold CDIO_INIT_LOCK to uphold thread
+        // safety.
+        let _lock = CDIO_INIT_LOCK.lock().unwrap();
         let drive_list =
             unsafe { libcdio_sys::cdio_get_devices(libcdio_sys::driver_id_t_DRIVER_DEVICE) };
         if drive_list.is_null() {
