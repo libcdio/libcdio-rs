@@ -7,7 +7,7 @@ For raw bindings, check out [libcdio-sys][libcdio-sys].
 - Install [clang][bindgen-reqs].
 - Add with cargo:
   ```shell
-  cargo add libcdio-rs --all-features
+  cargo add libcdio-rs
   ```
 
 Feature flags are provided and guard the modules named after them.
@@ -76,7 +76,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 [bindgen-reqs]: https://rust-lang.github.io/rust-bindgen/requirements.html
 [libcdio-cli-cratesio]: https://crates.io/crates/libcdio-cli
-[libcdio-rs-docs]: https://docs.rs/libcdio-rs/latest/libcdio-rs
+[libcdio-rs-docs]: https://docs.rs/libcdio-rs/
 [libcdio-site]: https://libcdio.github.io
 [libcdio-sys]: https://crates.io/crates/libcdio-sys
 [mmc6r2g]: https://www.13thmonkey.org/documentation/SCSI/mmc6r02g.pdf
