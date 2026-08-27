@@ -491,7 +491,9 @@ impl MmcFeature {
     fn profile_list(dtor: &[u8]) -> Self {
         let data = &dtor[4..]; // skip the header
         let profiles = data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter_map(|chunk| {
                 let kind = read_u16(chunk);
                 Some(MmcProfile {
